@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import {
@@ -54,6 +56,12 @@ export function CourseEditor({
   // Track saved state per chapter to detect unsaved changes
   const savedSnapshotsRef = useRef<Record<string, string>>({});
 
+  // Debug: log mount/unmount cycles
+  useEffect(() => {
+    console.log("[CourseEditor] MOUNTED");
+    return () => console.log("[CourseEditor] UNMOUNTED");
+  }, []);
+
   const getChapterSnapshot = (ch: Chapter) =>
     JSON.stringify({ title: ch.title, content: ch.content, order: ch.order });
 
@@ -76,14 +84,16 @@ export function CourseEditor({
     const fetchChapters = async () => {
       try {
         setIsLoadingChapters(true);
-        const response = await api.get(`/courses/${courseId}/chapters/`);
+        const response = await api.get(`/courses/${courseId}/chapters/`, {
+          skipAuthRefresh: true,
+        });
         const fetched: Chapter[] = (response?.data ?? []).map((ch: any) => ({
           id: String(ch.id),
           title: ch.title || "",
           content: ch.content || "",
           order: ch.order ?? 1,
           videoFile: null,
-          videoUrl: ch.video || "",
+          videoUrl: ch.video || ch.media_url || ch.video_url || "",
         }));
         setChapters(fetched);
         // Save snapshots for all fetched chapters (they are "saved" state)
@@ -134,7 +144,9 @@ export function CourseEditor({
   };
 
   // Handle Add Chapter with unsaved changes check
-  const addChapter = () => {
+  const addChapter = (e?: React.MouseEvent<HTMLButtonElement>) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     if (hasUnsavedChanges()) {
       setPendingChapterId("__new__");
       return;
@@ -269,16 +281,27 @@ export function CourseEditor({
       data.append("content", content);
       data.append("order", String(order));
       if (videoFile) {
+        data.append("video", videoFile);
         data.append("media_url", videoFile);
       }
 
-      const response = await api.post(`/courses/${courseId}/chapters/`, data);
-      console.log("chapter save response", response?.data);
+      console.log("[CourseEditor] Saving chapter...", { courseId, title, order });
+      for (const [key, value] of data.entries()) {
+        console.log("[CourseEditor] FormData entry:", key, value);
+      }
+      const response = await api.post(`/courses/${courseId}/chapters/`, data, {
+        skipAuthRefresh: true,
+      });
+      console.log("[CourseEditor] Save response:", response?.data);
       toast.success("Chapter saved successfully!");
 
       // Re-fetch chapters to update the list with server state
       try {
-        const refreshResponse = await api.get(`/courses/${courseId}/chapters/`);
+        console.log("[CourseEditor] Refreshing chapters...");
+        const refreshResponse = await api.get(`/courses/${courseId}/chapters/`, {
+          skipAuthRefresh: true,
+        });
+        console.log("[CourseEditor] Refresh response:", refreshResponse?.data);
         const fetched: Chapter[] = (refreshResponse?.data ?? []).map(
           (ch: any) => ({
             id: String(ch.id),
@@ -286,7 +309,7 @@ export function CourseEditor({
             content: ch.content || "",
             order: ch.order ?? 1,
             videoFile: null,
-            videoUrl: ch.video || "",
+            videoUrl: ch.video || ch.media_url || ch.video_url || "",
           }),
         );
         setChapters(fetched);
@@ -300,13 +323,15 @@ export function CourseEditor({
           (ch) => ch.title === title && ch.order === order,
         );
         setSelectedChapterId(savedChapter?.id ?? fetched[0]?.id ?? null);
+        console.log("[CourseEditor] Chapters refreshed");
       } catch (refreshError) {
-        console.error("Failed to refresh chapters:", refreshError);
+        console.error("[CourseEditor] Failed to refresh chapters:", refreshError);
       }
     } catch (error) {
-      console.error("Error saving chapter:", error);
+      console.error("[CourseEditor] Error saving chapter:", error);
       toast.error("Failed to save chapter. Please try again.");
     } finally {
+      console.log("[CourseEditor] Save chapter finished");
       setIsSavingChapter(false);
     }
   };
@@ -319,6 +344,7 @@ export function CourseEditor({
         <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={onCancel}
               className="text-gray-600 hover:text-gray-900"
             >
@@ -334,6 +360,7 @@ export function CourseEditor({
             </div>
           </div>
           <button
+            type="button"
             onClick={handleCreateCourse}
             disabled={isCreating}
             className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -362,6 +389,7 @@ export function CourseEditor({
               autoFocus
             />
             <button
+              type="button"
               onClick={handleCreateCourse}
               disabled={isCreating}
               className="mt-5 w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-60 disabled:cursor-not-allowed"
@@ -381,6 +409,7 @@ export function CourseEditor({
       <div className="bg-white border-b border-gray-200 px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={handleCancel}
             className="text-gray-600 hover:text-gray-900"
           >
@@ -396,6 +425,7 @@ export function CourseEditor({
           </div>
         </div>
         <button
+          type="button"
           onClick={handleSaveChapter}
           disabled={isSavingChapter || !selectedChapter}
           className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -470,6 +500,7 @@ export function CourseEditor({
                   </div>
                   {chapters.length > 1 && (
                     <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteChapter(chapter.id);
@@ -594,6 +625,7 @@ export function CourseEditor({
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={() =>
                           updateChapter(selectedChapter.id, { videoFile: null })
                         }
@@ -628,12 +660,14 @@ export function CourseEditor({
             </p>
             <div className="flex justify-end gap-3">
               <button
+                type="button"
                 onClick={cancelSwitch}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={confirmSwitch}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
               >

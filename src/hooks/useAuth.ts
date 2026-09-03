@@ -1,5 +1,5 @@
 // hooks/useAuth.ts
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
 import { logoutUser } from "@/store/slices/userSlice";
@@ -16,10 +16,8 @@ export const useAuth = (requireAuth: boolean = true) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const localUser = getLocalStorage("user");
-  // Get user from Redux store
-  const user = localUser;
-  // const user = useAppSelector((state) => state.user);
+  // Cache the parsed user object so it doesn't change reference on every render
+  const user = useMemo(() => getLocalStorage("user"), []);
 
   useEffect(() => {
     const checkAuth = () => {

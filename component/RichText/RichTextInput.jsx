@@ -1,13 +1,8 @@
 "use client";
 import React, { useRef } from "react";
-import dynamic from "next/dynamic";
 import PropTypes from "prop-types";
+import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
-
-const ReactQuill = dynamic(() => import("react-quill-new"), {
-  ssr: false,
-  loading: () => <p>Loading editor...</p>,
-});
 
 
 const toolbarOptions = [

@@ -1,4 +1,8 @@
-import { useState } from "react";
+"use client";
+
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
+import Select, { StylesConfig } from "react-select";
 import {
   ChevronRight,
   Megaphone,
@@ -6,7 +10,9 @@ import {
   Users,
   Building2,
   User,
+  Loader2,
 } from "lucide-react";
+import api from "@/src/utils/connection";
 
 interface CreateAnnouncementProps {
   userRole: "super-admin" | "org-admin";
@@ -15,18 +21,59 @@ interface CreateAnnouncementProps {
   onCancel: () => void;
 }
 
-const mockOrganizations = [
-  { id: "org-1", name: "Tech Academy" },
-  { id: "org-2", name: "Business Institute" },
-  { id: "org-3", name: "Creative School" },
-];
-
 const mockStudents = [
   { id: "1", name: "Hannah Martinez", org: "Tech Academy" },
   { id: "2", name: "John Smith", org: "Tech Academy" },
   { id: "3", name: "Sarah Johnson", org: "Business Institute" },
   { id: "4", name: "Mike Davis", org: "Creative School" },
 ];
+
+const audienceTypeMap: Record<string, string> = {
+  "all-students": "ALL_STUDENT",
+  "all-organizations": "ALL_ORGANIZATIONS",
+  "specific-organizations": "SPECIFIC_ORGANIZATIONS",
+  both: "BOTH",
+};
+
+const audienceOptions = [
+  { value: "all-students", label: "All Students" },
+  { value: "all-organizations", label: "All Organizations" },
+  { value: "specific-organizations", label: "Specific Organization(s)" },
+  { value: "both", label: "Specific Organizations & Students" },
+];
+
+const reactSelectStyles: StylesConfig<{ value: string; label: string }, false> = {
+  control: (base, state) => ({
+    ...base,
+    padding: "0.25rem",
+    borderRadius: "0.5rem",
+    borderColor: state.isFocused ? "#a855f7" : "#d1d5db",
+    boxShadow: state.isFocused ? "0 0 0 2px rgba(168, 85, 247, 0.2)" : "none",
+    "&:hover": {
+      borderColor: "#a855f7",
+    },
+  }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isSelected
+      ? "#a855f7"
+      : state.isFocused
+        ? "#f3e8ff"
+        : "white",
+    color: state.isSelected ? "white" : "#111827",
+    "&:active": {
+      backgroundColor: "#a855f7",
+    },
+  }),
+  singleValue: (base) => ({
+    ...base,
+    color: "#111827",
+  }),
+  placeholder: (base) => ({
+    ...base,
+    color: "#9ca3af",
+  }),
+};
 
 export function CreateAnnouncement({
   userRole,
@@ -41,11 +88,90 @@ export function CreateAnnouncement({
     selectedStudents: [] as string[],
     message: "",
   });
+  const [organizations, setOrganizations] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+      try {
+        setIsLoadingOrgs(true);
+        const response = await api.get("/organizations/");
+        const fetched = (response?.data ?? []).map((org: unknown) => {
+          const organization = org as Record<string, unknown>;
+          return {
+            id: String(organization.id ?? ""),
+            name: String(organization.name ?? "Unnamed Organization"),
+          };
+        });
+        setOrganizations(fetched);
+      } catch (error) {
+        console.error("Failed to fetch organizations:", error);
+        toast.error("Failed to load organizations");
+      } finally {
+        setIsLoadingOrgs(false);
+      }
+    };
+    fetchOrganizations();
+  }, [userRole]);
+
+  const availableOrganizations =
+    userRole === "org-admin" && organizationName
+      ? organizations.filter((org) => org.name === organizationName)
+      : organizations;
+
+  const availableStudents =
+    userRole === "org-admin" && organizationName
+      ? mockStudents.filter((s) => s.org === organizationName)
+      : mockStudents;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Validation would go here
-    onSave();
+
+    if (!formData.title.trim() || !formData.message.trim()) {
+      toast.error("Title and message are required");
+      return;
+    }
+
+    const audienceType = audienceTypeMap[formData.audienceType];
+    const payload: Record<string, string | string[]> = {
+      title: formData.title.trim(),
+      message: formData.message.trim(),
+      audience_type: audienceType,
+    };
+
+    if (
+      formData.audienceType === "specific-organizations" ||
+      formData.audienceType === "both"
+    ) {
+      if (formData.selectedOrganizations.length === 0) {
+        toast.error("Please select at least one organization");
+        return;
+      }
+      payload.organization_ids = formData.selectedOrganizations;
+    }
+
+    if (formData.audienceType === "both") {
+      if (formData.selectedStudents.length === 0) {
+        toast.error("Please select at least one student");
+        return;
+      }
+      payload.student_ids = formData.selectedStudents;
+    }
+
+    try {
+      setIsSubmitting(true);
+      await api.post("/announcements/", payload);
+      toast.success("Announcement published successfully");
+      onSave();
+    } catch (error) {
+      console.error("Failed to create announcement:", error);
+      toast.error("Failed to publish announcement");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const toggleOrganization = (orgId: string) => {
@@ -128,34 +254,39 @@ export function CreateAnnouncement({
                 <label className="block text-gray-700 mb-2">
                   Audience Type <span className="text-red-500">*</span>
                 </label>
-                <select
-                  required
-                  value={formData.audienceType}
-                  onChange={(e) =>
-                    setFormData({ ...formData, audienceType: e.target.value })
-                  }
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  <option value="all-students">All Students</option>
-                  {userRole === "super-admin" && (
-                    <option value="specific-organizations">
-                      Specific Organization(s)
-                    </option>
+                <Select
+                  options={audienceOptions}
+                  value={audienceOptions.find(
+                    (option) => option.value === formData.audienceType,
                   )}
-                  <option value="specific-students">Specific Student(s)</option>
-                </select>
+                  onChange={(option) =>
+                    setFormData({
+                      ...formData,
+                      audienceType: option?.value || "all-students",
+                    })
+                  }
+                  styles={reactSelectStyles}
+                  isSearchable={false}
+                  placeholder="Select audience..."
+                />
               </div>
 
-              {/* Conditional: Select Organizations (Super Admin only) */}
-              {userRole === "super-admin" &&
-                formData.audienceType === "specific-organizations" && (
-                  <div>
-                    <label className="block text-gray-700 mb-2">
-                      Select Organizations
-                    </label>
-                    <div className="border border-gray-300 rounded-lg p-4 max-h-48 overflow-y-auto bg-gray-50">
+              {/* Conditional: Select Organizations */}
+              {(formData.audienceType === "specific-organizations" ||
+                formData.audienceType === "both") && (
+                <div>
+                  <label className="block text-gray-700 mb-2">
+                    Select Organizations
+                  </label>
+                  <div className="border border-gray-300 rounded-lg p-4 max-h-48 overflow-y-auto bg-gray-50">
+                    {isLoadingOrgs ? (
+                      <div className="flex items-center justify-center py-4 text-gray-500">
+                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                        Loading organizations...
+                      </div>
+                    ) : (
                       <div className="space-y-2">
-                        {mockOrganizations.map((org) => (
+                        {availableOrganizations.map((org) => (
                           <label
                             key={org.id}
                             className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 cursor-pointer transition-colors"
@@ -172,21 +303,27 @@ export function CreateAnnouncement({
                             <span className="text-gray-900">{org.name}</span>
                           </label>
                         ))}
+                        {availableOrganizations.length === 0 && !isLoadingOrgs && (
+                          <p className="text-gray-500 text-sm">
+                            No organizations found
+                          </p>
+                        )}
                       </div>
-                    </div>
-                    <p className="text-gray-500 mt-2">
-                      {formData.selectedOrganizations.length > 0 && (
-                        <span className="text-purple-600">
-                          {formData.selectedOrganizations.length}{" "}
-                          organization(s) selected
-                        </span>
-                      )}
-                    </p>
+                    )}
                   </div>
-                )}
+                  <p className="text-gray-500 mt-2">
+                    {formData.selectedOrganizations.length > 0 && (
+                      <span className="text-purple-600">
+                        {formData.selectedOrganizations.length}{" "}
+                        organization(s) selected
+                      </span>
+                    )}
+                  </p>
+                </div>
+              )}
 
               {/* Conditional: Select Students */}
-              {formData.audienceType === "specific-students" && (
+              {formData.audienceType === "both" && (
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Select Students
@@ -198,9 +335,9 @@ export function CreateAnnouncement({
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
-                  <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto bg-gray-50">
+                    <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto bg-gray-50">
                     <div className="space-y-2">
-                      {mockStudents.map((student) => (
+                      {availableStudents.map((student) => (
                         <label
                           key={student.id}
                           className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 cursor-pointer transition-colors"
@@ -224,6 +361,11 @@ export function CreateAnnouncement({
                           </div>
                         </label>
                       ))}
+                      {availableStudents.length === 0 && (
+                        <p className="text-gray-500 text-sm">
+                          No students available
+                        </p>
+                      )}
                     </div>
                   </div>
                   <p className="text-gray-500 mt-2">
@@ -275,10 +417,15 @@ Administration Team"
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                  disabled={isSubmitting}
+                  className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Send className="w-5 h-5" />
-                  Publish Announcement
+                  {isSubmitting ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Send className="w-5 h-5" />
+                  )}
+                  {isSubmitting ? "Publishing..." : "Publish Announcement"}
                 </button>
               </div>
             </form>
@@ -301,6 +448,12 @@ Administration Team"
                         <span className="text-gray-900">All Students</span>
                       </>
                     )}
+                    {formData.audienceType === "all-organizations" && (
+                      <>
+                        <Building2 className="w-4 h-4 text-purple-600" />
+                        <span className="text-gray-900">All Organizations</span>
+                      </>
+                    )}
                     {formData.audienceType === "specific-organizations" && (
                       <>
                         <Building2 className="w-4 h-4 text-purple-600" />
@@ -310,10 +463,12 @@ Administration Team"
                         </span>
                       </>
                     )}
-                    {formData.audienceType === "specific-students" && (
+                    {formData.audienceType === "both" && (
                       <>
-                        <User className="w-4 h-4 text-purple-600" />
+                        <Building2 className="w-4 h-4 text-purple-600" />
                         <span className="text-gray-900">
+                          {formData.selectedOrganizations.length || "No"} Org(s)
+                          ,{" "}
                           {formData.selectedStudents.length || "No"} Student(s)
                         </span>
                       </>

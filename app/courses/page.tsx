@@ -6,6 +6,36 @@ import { useAuth } from "@/src/hooks/useAuth";
 import { SkeletonList } from "@/component/SkeletonLoader";
 import { CourseEditor } from "@/component/CourseEditor";
 import { toast } from "react-toastify";
+
+class CourseEditorErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error("[CourseEditorErrorBoundary]", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-red-600">
+          <h2 className="text-xl font-bold">Something went wrong</h2>
+          <p>{this.state.error?.message}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 const defaultFormData = {
   name: "",
   description: "",
@@ -63,14 +93,16 @@ const page = () => {
 
   if (isEdit.status) {
     return (
-      <CourseEditor
-        onSave={() => setIsEdit({ ...isEdit, status: false })}
-        onCancel={() => setIsEdit({ ...isEdit, status: false })}
-        formData={isEdit.formData}
-        setFormData={(formData: any) => setIsEdit({ ...isEdit, formData })}
-        isEdit={isEdit}
-        setIsEdit={setIsEdit}
-      />
+      <CourseEditorErrorBoundary>
+        <CourseEditor
+          onSave={() => setIsEdit({ ...isEdit, status: false })}
+          onCancel={() => setIsEdit({ ...isEdit, status: false })}
+          formData={isEdit.formData}
+          setFormData={(formData: any) => setIsEdit({ ...isEdit, formData })}
+          isEdit={isEdit}
+          setIsEdit={setIsEdit}
+        />
+      </CourseEditorErrorBoundary>
     );
   }
   return (
