@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import api from "@/src/utils/connection";
 import { CreateAnnouncement } from "@/component/CreateAnnouncement";
 import { useAuth } from "@/src/hooks/useAuth";
+import { normalizeRole, roleKeys, RoleKey } from "@/src/constants/roleKeys";
 
 interface Announcement {
   id: string;
@@ -68,12 +69,10 @@ const formatDate = (dateString: string) => {
 };
 
 const AnnouncementsPage = () => {
-  const { user: authUser } = useAuth();
-  const user = authUser as {
-    role?: string;
-    name?: string;
-    organization_name?: string;
-  } | null;
+  const { user } = useAuth();
+  const role: RoleKey = normalizeRole(user?.role);
+  const canCreateAnnouncements =
+    role === roleKeys.SUPER_ADMIN || role === roleKeys.ORG_ADMIN;
   const [view, setView] = useState<"list" | "create">("list");
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [organizations, setOrganizations] = useState<Record<string, string>>({});
@@ -83,7 +82,7 @@ const AnnouncementsPage = () => {
     try {
       const response = await api.get("/organizations/");
       const orgMap: Record<string, string> = {};
-      (response?.data ?? []).forEach((org: unknown) => {
+      ((response?.data ?? []) as unknown[]).forEach((org: unknown) => {
         const organization = org as Record<string, unknown>;
         orgMap[String(organization.id ?? "")] = String(
           organization.name ?? "Unknown Organization",
@@ -99,7 +98,8 @@ const AnnouncementsPage = () => {
     try {
       setIsLoading(true);
       const response = await api.get("/announcements/");
-      const fetched: Announcement[] = (response?.data ?? []).map(
+      const items = (response?.data ?? []) as unknown[];
+      const fetched: Announcement[] = items.map(
         (item: unknown) => {
           const announcement = item as Record<string, unknown>;
           return {
@@ -116,7 +116,7 @@ const AnnouncementsPage = () => {
               ? announcement.student_ids.map(String)
               : undefined,
             created_at: String(announcement.created_at ?? ""),
-            created_by: announcement.created_by,
+            created_by: announcement.created_by as string | undefined,
           };
         },
       );
@@ -139,11 +139,11 @@ const AnnouncementsPage = () => {
     fetchAnnouncements();
   };
 
-  if (view === "create") {
+  if (view === "create" && canCreateAnnouncements) {
     return (
       <CreateAnnouncement
-        userRole={(user?.role as "super-admin" | "org-admin") || "org-admin"}
-        organizationName={user?.organization_name || user?.name}
+        userRole={role === roleKeys.SUPER_ADMIN ? "super-admin" : "org-admin"}
+        organizationName={user?.organizationName || user?.name}
         onSave={handleSave}
         onCancel={() => setView("list")}
       />
@@ -154,14 +154,16 @@ const AnnouncementsPage = () => {
     <div className="max-w-7xl mx-auto px-8 py-8">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h2 className="text-gray-900">Announcements</h2>
-          <button
-            onClick={() => setView("create")}
-            className="bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
-          >
-            <PlusCircle className="w-5 h-5" />
-            Create Announcement
-          </button>
+          <h2 className="text-gray-900 text-2xl font-bold">Announcements</h2>
+          {canCreateAnnouncements && (
+            <button
+              onClick={() => setView("create")}
+              className="bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-2"
+            >
+              <PlusCircle className="w-5 h-5" />
+              Create Announcement
+            </button>
+          )}
         </div>
 
         {isLoading ? (

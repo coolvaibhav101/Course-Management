@@ -6,12 +6,6 @@ import {
   Megaphone,
   Users,
   BarChart3,
-  Settings,
-  PlusCircle,
-  Download,
-  TrendingUp,
-  Award,
-  Calendar,
   MessageSquare,
 } from "lucide-react";
 export const navItems = {
@@ -41,7 +35,12 @@ export const navItems = {
       icon: Users,
       route: "/users",
     },
-    // { id: "reports", label: "Reports & Analytics", icon: BarChart3 },
+    {
+      id: "reports",
+      label: "Reports & Analytics",
+      icon: BarChart3,
+      route: "/reports",
+    },
     // { id: "settings", label: "Settings", icon: Settings },
   ],
   [roleKeys.ORG_ADMIN]: [
@@ -52,14 +51,12 @@ export const navItems = {
     // { id: "messages", label: "Messages", route: "/messages", icon: MessageSquare, badge: 1  },
     // { id: "reports", label: "Reports & Analytics", route: "/reports", icon: BarChart3 },
   ],
-  [roleKeys.student]: [
+  [roleKeys.STUDENT]: [
     { id: "dashboard", label: "Dashboard", route: "/dashboard", icon: LayoutDashboard },
     { id: "courses", label: "Courses", route: "/courses", icon: BookOpen },
     { id: "messages", label: "Messages", route: "/messages", icon: MessageSquare,
       //  badge: 1
         },
-    { id: "calendar", label: "Calendar", route: "/calendar", icon: Calendar },
     { id: "reports", label: "Analytics", route: "/reports", icon: BarChart3 },
-    { id: "certifications", label: "Certifications", route: "/certifications", icon: Settings },
   ],
 };

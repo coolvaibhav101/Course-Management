@@ -5,10 +5,9 @@ import { GraduationCap } from "lucide-react";
 import { loginUser } from "@/store/slices/userSlice";
 import { useAppDispatch } from "@/hooks/reduxHooks";
 import api, { ApiError, setTokens } from "@/src/utils/connection";
-import dynamic from "next/dynamic";
 
 interface LoginPageProps {
-  onLogin?: (user: Record<string, any>) => void;
+  onLogin?: (user: Record<string, unknown>) => void;
 }
 
 // Define the expected response from your login API
@@ -92,8 +91,9 @@ const Page = ({ onLogin }: LoginPageProps) => {
       // Handle API errors
       if (err instanceof ApiError) {
         // Use the error message from the API
+        const errorData = err.data as { message?: string } | undefined;
         setError(
-          err.data?.message ||
+          errorData?.message ||
           err.message ||
           "Login failed. Please check your credentials."
         );

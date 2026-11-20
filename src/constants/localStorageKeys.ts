@@ -4,7 +4,7 @@ export const LOCAL_STORAGE_KEYS = {
   REFRESH_TOKEN: "refresh_token",
 
   // User
-  USER_INFO: "user_info",
+  USER_INFO: "user",
   USER_ROLE: "user_role",
 
   // Admin

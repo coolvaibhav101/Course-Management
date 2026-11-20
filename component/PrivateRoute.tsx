@@ -14,13 +14,13 @@ export default function PrivateRoute({
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(true);
-  const isLoggedIn = useAppSelector(
-    (state: any) => state.user.value.isLoggedIn
-  );
+  const isLoggedIn = useAppSelector((state) => state.user.isAuthenticated);
 
   useEffect(() => {
     const checkAuth = () => {
-      // Your auth logic here
+      if (!isLoggedIn) {
+        router.push("/login");
+      }
       setIsLoading(false);
     };
     checkAuth();

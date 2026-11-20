@@ -1,17 +1,52 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import React from "react";
+import { usePathname, useRouter } from "next/navigation";
+import React, { useEffect } from "react";
 import { LeftNav } from "@/component/LeftNav";
 import { TopHeader } from "@/component/TopHeader";
-import { roleKeys } from "@/src/constants/roleKeys";
+import { navItems } from "@/src/constants/navItems";
+import { normalizeRole, RoleKey, roleKeys } from "@/src/constants/roleKeys";
 import { useAuth } from "@/src/hooks/useAuth";
 import { ProtectedRoute } from "@/component/ProtectedRoute";
 
 const MainPage = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout, isLoading, isAuthenticated } = useAuth(true);
-  
+
+  const userRole: RoleKey = user?.role
+    ? normalizeRole(user.role)
+    : roleKeys.SUPER_ADMIN;
+
+  const allowedRoutes = React.useMemo(
+    () =>
+      (navItems[userRole] ?? []).map(
+        (item: { route: string }) => item.route,
+      ),
+    [userRole],
+  );
+
+  const isAllowedRoute = allowedRoutes.includes(pathname) ||
+    (userRole === roleKeys.STUDENT && /^\/courses\/[^/]+$/.test(pathname));
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !user) return;
+
+    // Redirect root to dashboard
+    if (pathname === "/") {
+      router.replace("/dashboard");
+      return;
+    }
+
+    // Redirect away from routes this role cannot access
+    if (
+      allowedRoutes.length > 0 &&
+      !isAllowedRoute
+    ) {
+      router.replace(allowedRoutes[0] || "/dashboard");
+    }
+  }, [isLoading, isAuthenticated, user, pathname, router, allowedRoutes, isAllowedRoute]);
+
   // Show loading state while checking authentication
   if (isLoading) {
     return (
@@ -33,7 +68,8 @@ const MainPage = ({ children }: { children: React.ReactNode }) => {
 
   // Get user display name
   const userName = user.name || "User";
-  const userRole = user.role || roleKeys.SUPER_ADMIN;
+
+  if (!isAllowedRoute) return null;
 
   return (
     <ProtectedRoute>

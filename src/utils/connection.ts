@@ -1,4 +1,5 @@
 // connection.ts
+import { LOCAL_STORAGE_KEYS } from "@/src/constants/localStorageKeys";
 
 // Configuration
 const BASE_URL =
@@ -12,7 +13,7 @@ interface RequestConfig extends RequestInit {
   skipAuthRefresh?: boolean; // Flag to prevent infinite refresh loops
 }
 
-interface ApiResponse<T = any> {
+interface ApiResponse<T = unknown> {
   data: T;
   status: number;
   message?: string;
@@ -20,9 +21,9 @@ interface ApiResponse<T = any> {
 
 class ApiError extends Error {
   status: number;
-  data?: any;
+  data?: unknown;
 
-  constructor(message: string, status: number, data?: any) {
+  constructor(message: string, status: number, data?: unknown) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -31,16 +32,16 @@ class ApiError extends Error {
 }
 
 // Token Management
-const TOKEN_KEY = "auth_token";
-const REFRESH_TOKEN_KEY = "refresh_token";
+const TOKEN_KEY = LOCAL_STORAGE_KEYS.AUTH_TOKEN;
+const REFRESH_TOKEN_KEY = LOCAL_STORAGE_KEYS.REFRESH_TOKEN;
 
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (value?: unknown) => void;
-  reject: (reason?: any) => void;
+  reject: (reason?: unknown) => void;
 }> = [];
 
-const processQueue = (error: any = null) => {
+const processQueue = (error: unknown = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
       prom.reject(error);
@@ -53,7 +54,7 @@ const processQueue = (error: any = null) => {
 };
 
 // Helper to build query string
-const buildQueryString = (params: Record<string, any>): string => {
+const buildQueryString = (params: Record<string, unknown>): string => {
   const query = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -86,7 +87,7 @@ const refreshAuthToken = async (): Promise<string> => {
       throw new ApiError("Failed to refresh token", response.status);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as { access?: string };
 
     // Store the new access token
     if (data.access) {
@@ -109,7 +110,7 @@ const refreshAuthToken = async (): Promise<string> => {
 };
 
 // Core request handler
-const request = async <T = any>(
+const request = async <T = unknown>(
   endpoint: string,
   config: RequestConfig = {},
 ): Promise<ApiResponse<T>> => {
@@ -141,13 +142,18 @@ const request = async <T = any>(
     });
 
     // Parse response
-    let data;
+    let data: unknown;
     const contentType = response.headers.get("content-type");
-    if (contentType?.includes("application/json")) {
+    if (response.status === 204) {
+      data = null;
+    } else if (contentType?.includes("application/json")) {
       data = await response.json();
     } else {
       data = await response.text();
     }
+
+    const apiData =
+      data && typeof data === "object" ? (data as { message?: string }) : {};
 
     // Handle 401 - Token expired
     if (response.status === 401 && !skipAuthRefresh) {
@@ -181,16 +187,16 @@ const request = async <T = any>(
     // Handle other errors
     if (!response.ok) {
       throw new ApiError(
-        data?.message || `Request failed with status ${response.status}`,
+        apiData.message || `Request failed with status ${response.status}`,
         response.status,
         data,
       );
     }
 
     return {
-      data,
+      data: data as T,
       status: response.status,
-      message: data?.message,
+      message: apiData.message,
     };
   } catch (error) {
     if (error instanceof ApiError) {
@@ -205,10 +211,14 @@ const request = async <T = any>(
 
 // HTTP Methods
 export const api = {
-  get: <T = any>(endpoint: string, config?: RequestConfig) =>
+  get: <T = unknown>(endpoint: string, config?: RequestConfig) =>
     request<T>(endpoint, { ...config, method: "GET" }),
 
-  post: <T = any>(endpoint: string, body?: any, config?: RequestConfig) =>
+  post: <T = unknown>(
+    endpoint: string,
+    body?: unknown,
+    config?: RequestConfig,
+  ) =>
     request<T>(endpoint, {
       ...config,
       method: "POST",
@@ -220,21 +230,29 @@ export const api = {
             : undefined,
     }),
 
-  put: <T = any>(endpoint: string, body?: any, config?: RequestConfig) =>
+  put: <T = unknown>(
+    endpoint: string,
+    body?: unknown,
+    config?: RequestConfig,
+  ) =>
     request<T>(endpoint, {
       ...config,
       method: "PUT",
       body: body ? JSON.stringify(body) : undefined,
     }),
 
-  patch: <T = any>(endpoint: string, body?: any, config?: RequestConfig) =>
+  patch: <T = unknown>(
+    endpoint: string,
+    body?: unknown,
+    config?: RequestConfig,
+  ) =>
     request<T>(endpoint, {
       ...config,
       method: "PATCH",
       body: body ? JSON.stringify(body) : undefined,
     }),
 
-  delete: <T = any>(endpoint: string, config?: RequestConfig) =>
+  delete: <T = unknown>(endpoint: string, config?: RequestConfig) =>
     request<T>(endpoint, { ...config, method: "DELETE" }),
 };
 

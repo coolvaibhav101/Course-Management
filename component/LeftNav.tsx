@@ -1,7 +1,15 @@
 import { navItems } from "@/src/constants/navItems";
 import Link from "next/link";
 import React, { useState, useEffect } from "react";
-import { X, Menu } from "lucide-react";
+import { X, Menu, LucideIcon } from "lucide-react";
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  route: string;
+  badge?: number;
+}
 
 interface LeftNavProps {
   activeTab: string;
@@ -12,7 +20,7 @@ interface LeftNavProps {
 
 export function LeftNav({ activeTab, userName, userRole, title = "Educational Platform" }: LeftNavProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const items = navItems[userRole];
+  const items = navItems[userRole] as NavItem[] | undefined;
 
   // Close mobile menu when clicking outside or on navigation
   useEffect(() => {
@@ -96,9 +104,9 @@ export function LeftNav({ activeTab, userName, userRole, title = "Educational Pl
         </div>
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto py-4">
-          {(items ?? []).map((item: any) => {
+          {(items ?? []).map((item: NavItem) => {
             const Icon = item.icon;
-            const isActive = activeTab === `/${item.id}`;
+            const isActive = activeTab === item.route || activeTab.startsWith(`${item.route}/`);
 
             return (
               <Link

@@ -99,7 +99,8 @@ export function CreateAnnouncement({
       try {
         setIsLoadingOrgs(true);
         const response = await api.get("/organizations/");
-        const fetched = (response?.data ?? []).map((org: unknown) => {
+        const fetched = ((response?.data ?? []) as unknown[]).map(
+          (org: unknown) => {
           const organization = org as Record<string, unknown>;
           return {
             id: String(organization.id ?? ""),

@@ -1,12 +1,15 @@
 // store/slices/userSlice.ts
+import { LOCAL_STORAGE_KEYS } from "@/src/constants/localStorageKeys";
+import { normalizeRole, RoleKey } from "@/src/constants/roleKeys";
+import { User } from "@/types/user";
 import { removeLocalStorage, setLocalStorage } from "@/src/utils/storage";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
-interface UserState {
+export interface UserState {
   id: string | null;
   name: string | null;
   email: string | null;
-  role: string | null;
+  role: RoleKey | null;
   organizationId?: string;
   organizationName?: string;
   isAuthenticated: boolean;
@@ -26,18 +29,32 @@ const userSlice = createSlice({
   name: "user",
   initialState,
   reducers: {
-    loginUser: (state, action: PayloadAction<any>) => {
-      setLocalStorage("user", action.payload);
-      state.id = action.payload.id;
-      state.name = action.payload.name;
-      state.email = action.payload.email;
-      state.role = action.payload.role;
-      state.organizationId = action.payload.organizationId;
-      state.organizationName = action.payload.organizationName;
+    loginUser: (
+      state,
+      action: PayloadAction<User | Record<string, unknown>>,
+    ) => {
+      const payload = (action.payload || {}) as Record<string, unknown>;
+      const normalizedUser = {
+        ...payload,
+        role: normalizeRole(payload.role as string | undefined),
+      };
+      setLocalStorage(LOCAL_STORAGE_KEYS.USER_INFO, normalizedUser);
+      state.id = String(payload.id ?? "");
+      state.name = String(payload.name ?? "");
+      state.email = String(payload.email ?? "");
+      state.role = normalizedUser.role;
+      state.organizationId =
+        payload.organizationId === undefined
+          ? undefined
+          : String(payload.organizationId);
+      state.organizationName =
+        payload.organizationName === undefined
+          ? undefined
+          : String(payload.organizationName);
       state.isAuthenticated = true;
     },
     logoutUser: (state) => {
-      removeLocalStorage("user");
+      removeLocalStorage(LOCAL_STORAGE_KEYS.USER_INFO);
       // Reset to initial state
       state.id = null;
       state.name = null;

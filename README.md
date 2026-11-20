@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Course Management
 
-## Getting Started
+A Next.js 16 and React 19 frontend with Redux and Tailwind CSS for an educational platform.
 
-First, run the development server:
+The app has role-aware screens for super admins, organization admins, and students.
+Super admins manage organizations, courses, users, and announcements. Organization
+admins create students and assign courses. Students view enrolled courses, read
+chapters, record chapter completion, and view learning progress.
+
+## Local development
+
+Use Node.js 20.9 or later and install the dependencies:
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Development mode reloads source
+changes automatically. Sign in with an account from the configured backend.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Backend configuration
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The API client defaults to `https://student-portal-wh5i.onrender.com/api`.
+To use another backend, create `.env.local` in the project root:
 
-## Learn More
+```env
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000/api
+```
 
-To learn more about Next.js, take a look at the following resources:
+Include `/api` without a trailing slash and restart the server after changing this
+setting. Environment files are excluded from Git. The shared API client handles
+Bearer authorization and access-token refresh.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+See [Student learning API integration](docs/student-learning-api.md),
+[Student course assignment](docs/student-course-assignment.md), and
+[Organization course assignment](docs/organization-course-assignment.md) for the
+current endpoint contracts. Backend verification and unfinished integrations are
+tracked in [remaining-work.md](remaining-work.md).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Validation
 
-## Deploy on Vercel
+```bash
+node --test tests/student-api.test.mjs tests/organization-data.test.mjs
+npm run lint
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The tests exercise the actual TypeScript services with controlled API responses;
+they do not require live backend credentials.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Production server
+
+```bash
+npm run build
+npm run start
+```
+
+`npm run start` serves the compiled build. Rebuild and restart it after source
+changes, or use `npm run dev` while developing.
+
+Course cards use a locally stored study photo when no course image is available.
+Its source and license are recorded in [public/images/README.md](public/images/README.md).

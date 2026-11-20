@@ -1,19 +1,22 @@
 // components/ProtectedRoute.tsx
 "use client";
 
+import { RoleKey } from "@/src/constants/roleKeys";
 import { useAuth } from "@/src/hooks/useAuth";
 import React, { ReactNode } from "react";
 
 interface ProtectedRouteProps {
   children: ReactNode;
   fallback?: ReactNode;
+  allowedRoles?: RoleKey[];
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   fallback,
+  allowedRoles,
 }) => {
-  const { isLoading, isAuthenticated } = useAuth(true);
+  const { isLoading, isAuthenticated, user } = useAuth(true);
 
   // Default loading fallback
   const defaultFallback = (
@@ -28,6 +31,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   if (!isAuthenticated) {
     return null; // Will redirect to login via useAuth hook
+  }
+
+  if (
+    allowedRoles &&
+    user?.role &&
+    !allowedRoles.includes(user.role as RoleKey)
+  ) {
+    return null; // Role guard handled by parent (e.g. MainPage)
   }
 
   return <>{children}</>;

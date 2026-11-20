@@ -24,7 +24,8 @@ const UsersPage = () => {
       try {
         setIsLoading(true);
         const response = await api.get("/students/progress-summary/");
-        const fetched: StudentProgress[] = (response?.data ?? []).map(
+        const items = (response?.data ?? []) as unknown[];
+        const fetched: StudentProgress[] = items.map(
           (item: unknown) => {
             const student = item as Record<string, unknown>;
             const user = student.user as Record<string, unknown> | undefined;

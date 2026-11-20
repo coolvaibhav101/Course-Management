@@ -1,7 +1,9 @@
 // hooks/useAuth.ts
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAppDispatch, useAppSelector } from "@/hooks/reduxHooks";
+import { LOCAL_STORAGE_KEYS } from "@/src/constants/localStorageKeys";
+import { normalizeRole, RoleKey } from "@/src/constants/roleKeys";
+import { useAppDispatch } from "@/hooks/reduxHooks";
 import { logoutUser } from "@/store/slices/userSlice";
 import {
   getAuthToken,
@@ -11,13 +13,41 @@ import {
 } from "@/src/utils/connection";
 import { getLocalStorage } from "../utils/storage";
 
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  role: RoleKey;
+  organizationId?: string;
+  organizationName?: string;
+}
+
 export const useAuth = (requireAuth: boolean = true) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
   const dispatch = useAppDispatch();
   // Cache the parsed user object so it doesn't change reference on every render
-  const user = useMemo(() => getLocalStorage("user"), []);
+  const user = useMemo<AuthUser | null>(() => {
+    const stored = getLocalStorage<Record<string, unknown>>(
+      LOCAL_STORAGE_KEYS.USER_INFO,
+    );
+    if (!stored) return null;
+    return {
+      id: String(stored.id ?? ""),
+      name: String(stored.name ?? ""),
+      email: String(stored.email ?? ""),
+      role: normalizeRole(stored.role as string | undefined),
+      organizationId:
+        stored.organizationId === undefined
+          ? undefined
+          : String(stored.organizationId),
+      organizationName:
+        stored.organizationName === undefined
+          ? undefined
+          : String(stored.organizationName),
+    };
+  }, []);
 
   useEffect(() => {
     const checkAuth = () => {

@@ -1,6 +1,7 @@
 "use client";
 import React, { useRef } from "react";
 import PropTypes from "prop-types";
+import DOMPurify from "dompurify";
 import ReactQuill from "react-quill-new";
 import "react-quill-new/dist/quill.snow.css";
 
@@ -47,8 +48,7 @@ const RichTextInput = ({
   const quillRef = useRef(null);
 
   const createMarkup = (content) => {
-    if (typeof window !== "undefined") {
-      const DOMPurify = require("dompurify");
+    if (typeof window !== "undefined" && DOMPurify) {
       return { __html: DOMPurify.sanitize(content) };
     }
     return { __html: content };

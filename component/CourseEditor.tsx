@@ -28,10 +28,10 @@ interface Chapter {
 interface CourseEditorProps {
   onSave: () => void;
   onCancel: () => void;
-  formData: any;
-  setFormData: (formData: any) => void;
-  isEdit: any;
-  setIsEdit: (isEdit: any) => void;
+  formData: Record<string, unknown>;
+  setFormData: (formData: Record<string, unknown>) => void;
+  isEdit: Record<string, unknown>;
+  setIsEdit: (isEdit: Record<string, unknown>) => void;
 }
 
 export function CourseEditor({
@@ -42,12 +42,14 @@ export function CourseEditor({
   isEdit,
   setIsEdit,
 }: CourseEditorProps) {
-  const courseId = formData?.id;
+  const courseId = formData?.id as string | undefined;
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(
     null,
   );
-  const [courseTitle, setCourseTitle] = useState(formData?.title || "");
+  const [courseTitle, setCourseTitle] = useState(
+    (formData?.title as string) || "",
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [isSavingChapter, setIsSavingChapter] = useState(false);
   const [isLoadingChapters, setIsLoadingChapters] = useState(false);
@@ -78,8 +80,10 @@ export function CourseEditor({
   const selectedChapter = chapters.find((ch) => ch.id === selectedChapterId);
 
   // Fetch existing chapters when editing a course
+  const isNewCourse = Boolean(isEdit?.isNew);
+
   useEffect(() => {
-    if (!courseId || isEdit?.isNew) return;
+    if (!courseId || isNewCourse) return;
 
     const fetchChapters = async () => {
       try {
@@ -87,13 +91,15 @@ export function CourseEditor({
         const response = await api.get(`/courses/${courseId}/chapters/`, {
           skipAuthRefresh: true,
         });
-        const fetched: Chapter[] = (response?.data ?? []).map((ch: any) => ({
+        const data = (response?.data ?? []) as Array<Record<string, unknown>>;
+        const fetched: Chapter[] = data.map((ch) => ({
           id: String(ch.id),
-          title: ch.title || "",
-          content: ch.content || "",
-          order: ch.order ?? 1,
+          title: String(ch.title || ""),
+          content: String(ch.content || ""),
+          order: Number(ch.order ?? 1),
           videoFile: null,
-          videoUrl: ch.video || ch.media_url || ch.video_url || "",
+          videoUrl:
+            String(ch.video || ch.media_url || ch.video_url || ""),
         }));
         setChapters(fetched);
         // Save snapshots for all fetched chapters (they are "saved" state)
@@ -113,7 +119,7 @@ export function CourseEditor({
     };
 
     fetchChapters();
-  }, [courseId, isEdit?.isNew]);
+  }, [courseId, isNewCourse]);
 
   // Check if a chapter is new (never saved to server)
   const isNewUnsavedChapter = (id: string) => !savedSnapshotsRef.current[id];
@@ -213,7 +219,7 @@ export function CourseEditor({
       console.log("coursesResponse?.data", coursesResponse?.data);
       toast.success("Course created! Now add chapters.");
       // Transition to edit mode with the new course ID
-      const newCourse = coursesResponse?.data;
+      const newCourse = coursesResponse?.data as Record<string, unknown>;
       setFormData(newCourse);
       setIsEdit({ status: true, isNew: false, formData: newCourse });
     } catch (error) {
@@ -302,16 +308,17 @@ export function CourseEditor({
           skipAuthRefresh: true,
         });
         console.log("[CourseEditor] Refresh response:", refreshResponse?.data);
-        const fetched: Chapter[] = (refreshResponse?.data ?? []).map(
-          (ch: any) => ({
-            id: String(ch.id),
-            title: ch.title || "",
-            content: ch.content || "",
-            order: ch.order ?? 1,
-            videoFile: null,
-            videoUrl: ch.video || ch.media_url || ch.video_url || "",
-          }),
-        );
+        const refreshData = (refreshResponse?.data ?? []) as Array<
+          Record<string, unknown>
+        >;
+        const fetched: Chapter[] = refreshData.map((ch) => ({
+          id: String(ch.id),
+          title: String(ch.title || ""),
+          content: String(ch.content || ""),
+          order: Number(ch.order ?? 1),
+          videoFile: null,
+          videoUrl: String(ch.video || ch.media_url || ch.video_url || ""),
+        }));
         setChapters(fetched);
         const snapshots: Record<string, string> = {};
         fetched.forEach((ch) => {
@@ -337,7 +344,7 @@ export function CourseEditor({
   };
 
   // ─── Step 1 UI: Create New Course ────────────────────────────────────────
-  if (isEdit?.isNew) {
+  if (isNewCourse) {
     return (
       <div className="flex flex-col h-screen bg-gray-50">
         {/* Header */}
@@ -417,7 +424,7 @@ export function CourseEditor({
           </button>
           <div>
             <h1 className="text-gray-900 text-xl font-semibold">
-              {formData?.title || courseTitle || "Edit Course"}
+              {(formData?.title as string) || courseTitle || "Edit Course"}
             </h1>
             <p className="text-gray-500 text-sm">
               Add chapters and content to your course

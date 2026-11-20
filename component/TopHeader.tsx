@@ -1,4 +1,4 @@
-import { LogOut, Bell } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 interface User {
   id: string | null;
