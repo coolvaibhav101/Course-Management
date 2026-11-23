@@ -43,7 +43,7 @@ refer to implementation; live backend verification is still pending.
 - [ ] Decide where to expose the existing `AssignmentsList` and `LMSLauncher` components and connect their actions.
   - Both components exist but are currently unused by pages.
   - Files: `component/student/AssignmentsList.tsx`, `component/student/LMSLauncher.tsx`
-- [x] Connect student dashboard statistics and analytics to the progress-summary service; display unavailable values rather than invented totals.
+- [x] Connect student dashboard statistics and analytics to the completion-details service; display unavailable values rather than invented totals.
   - Response mapping is provisional until example JSON is provided.
 - [ ] Replace the static skill graph and mini calendar with actual student data.
   - Files: `component/StudentDashboardHome.tsx`, `component/student/ProgressDashboard.tsx`
@@ -63,15 +63,15 @@ refer to implementation; live backend verification is still pending.
   - These services already exist and contain backend-contract TODO markers.
 - [x] Implement the five supplied student learning endpoints through the existing authenticated client.
   - GET `/students/my-courses/`
-  - GET `/courses/{courseId}/chapters/`
+  - GET `/courses/{courseId}/` for student course content
   - GET `/students/{courseId}/progress/`
   - POST `/students/complete-chapter/` with `{ "chapter_id": "<selected chapter ID>" }`
-  - GET `/students/progress-summary/`
+  - GET `/students/completion-details/`
 - [x] Map the supplied my-courses `chapter_count` and show it beneath course titles, including 0 chapters.
-- [ ] Obtain example response JSON for course content, course progress, progress-summary, and chapter completion, then confirm/update `src/services/studentData.ts` against the actual fields.
-  - The user will share these later. The my-courses response is now supplied; the other response bodies remain pending.
+- [ ] Obtain example response JSON for course progress and chapter completion, then confirm/update `src/services/studentData.ts` against the actual fields.
+  - My-courses, chapter content, and completion-details responses are supplied. Course progress and chapter-completion response bodies remain pending.
   - Provisional mapping and local development configuration are documented in `docs/student-learning-api.md`.
-- [x] Add a student progress-summary service and connect it to dashboard/analytics data.
+- [x] Add a student completion-details service and connect it to dashboard/analytics data.
 - [ ] Add service support for message sending and certificate downloads as backend contracts become available.
 - [ ] Propagate request failures so screens can distinguish errors from successful empty responses.
   - Several services currently catch failures and return `[]` or `null`.

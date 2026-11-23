@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import RichTextInput from "./RichText/RichTextInput";
 import api from "@/src/utils/connection";
+import { parseCourseContent } from "@/src/services/studentData";
 
 interface Chapter {
   id: string;
@@ -88,18 +89,17 @@ export function CourseEditor({
     const fetchChapters = async () => {
       try {
         setIsLoadingChapters(true);
-        const response = await api.get(`/courses/${courseId}/chapters/`, {
+        const response = await api.get(`/courses/${courseId}/`, {
           skipAuthRefresh: true,
         });
-        const data = (response?.data ?? []) as Array<Record<string, unknown>>;
+        const data = parseCourseContent(response?.data, courseId).chapters;
         const fetched: Chapter[] = data.map((ch) => ({
           id: String(ch.id),
           title: String(ch.title || ""),
           content: String(ch.content || ""),
           order: Number(ch.order ?? 1),
           videoFile: null,
-          videoUrl:
-            String(ch.video || ch.media_url || ch.video_url || ""),
+          videoUrl: ch.video_url ?? "",
         }));
         setChapters(fetched);
         // Save snapshots for all fetched chapters (they are "saved" state)
@@ -291,7 +291,11 @@ export function CourseEditor({
         data.append("media_url", videoFile);
       }
 
-      console.log("[CourseEditor] Saving chapter...", { courseId, title, order });
+      console.log("[CourseEditor] Saving chapter...", {
+        courseId,
+        title,
+        order,
+      });
       for (const [key, value] of data.entries()) {
         console.log("[CourseEditor] FormData entry:", key, value);
       }
@@ -304,20 +308,21 @@ export function CourseEditor({
       // Re-fetch chapters to update the list with server state
       try {
         console.log("[CourseEditor] Refreshing chapters...");
-        const refreshResponse = await api.get(`/courses/${courseId}/chapters/`, {
-          skipAuthRefresh: true,
-        });
+        const refreshResponse = await api.get(
+          `/courses/${courseId}/`,
+          {
+            skipAuthRefresh: true,
+          },
+        );
         console.log("[CourseEditor] Refresh response:", refreshResponse?.data);
-        const refreshData = (refreshResponse?.data ?? []) as Array<
-          Record<string, unknown>
-        >;
+        const refreshData = parseCourseContent(refreshResponse?.data, courseId).chapters;
         const fetched: Chapter[] = refreshData.map((ch) => ({
           id: String(ch.id),
           title: String(ch.title || ""),
           content: String(ch.content || ""),
           order: Number(ch.order ?? 1),
           videoFile: null,
-          videoUrl: String(ch.video || ch.media_url || ch.video_url || ""),
+          videoUrl: ch.video_url ?? "",
         }));
         setChapters(fetched);
         const snapshots: Record<string, string> = {};
@@ -332,7 +337,10 @@ export function CourseEditor({
         setSelectedChapterId(savedChapter?.id ?? fetched[0]?.id ?? null);
         console.log("[CourseEditor] Chapters refreshed");
       } catch (refreshError) {
-        console.error("[CourseEditor] Failed to refresh chapters:", refreshError);
+        console.error(
+          "[CourseEditor] Failed to refresh chapters:",
+          refreshError,
+        );
       }
     } catch (error) {
       console.error("[CourseEditor] Error saving chapter:", error);

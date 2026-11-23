@@ -1,6 +1,7 @@
 // Response mapping lives here so it can be aligned with backend JSON independently
 // of the screens. Endpoint/request contracts are confirmed by the Postman examples;
-// My-courses fields are confirmed; other response fields still need examples.
+// My-courses, chapter, and completion-details fields are confirmed;
+// course progress and chapter-completion responses still need examples.
 export interface EnrolledCourse {
   id: string;
   title: string;
@@ -36,7 +37,7 @@ export interface StudentCourseProgress {
   completed_chapter_ids: string[];
 }
 
-export interface StudentProgressSummary {
+export interface StudentCompletionDetails {
   total_courses?: number;
   completed_courses?: number;
   total_chapters?: number;
@@ -46,6 +47,15 @@ export interface StudentProgressSummary {
   hours_learned?: number;
   average_test_score?: number;
   courses: EnrolledCourse[];
+}
+
+export interface StudentAnnouncement {
+  id: string;
+  title: string;
+  message: string;
+  created_at: string;
+  sender?: string;
+  is_read?: boolean;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -128,6 +138,23 @@ export function parseEnrolledCourses(value: unknown): EnrolledCourse[] {
   return list(value, "courses").map(course);
 }
 
+export function parseStudentAnnouncements(value: unknown): StudentAnnouncement[] {
+  return list(value, "announcements").map((value) => {
+    const data = object(value);
+    const id = text(data.id);
+    if (!id) throw new Error("Announcement response is missing its ID");
+    const creator = object(data.created_by);
+    return {
+      id,
+      title: text(data.title),
+      message: text(data.message),
+      created_at: text(data.created_at),
+      sender: text(data.created_by_name ?? creator.name ?? creator.email ?? data.created_by) || undefined,
+      is_read: typeof data.is_read === "boolean" ? data.is_read : undefined,
+    };
+  });
+}
+
 export function parseCourseContent(value: unknown, courseId: string): StudentCourseContent {
   const unwrapped = unwrap(value);
   const data = object(unwrapped);
@@ -182,10 +209,10 @@ export function parseCourseProgress(value: unknown, courseId: string): StudentCo
   };
 }
 
-export function parseProgressSummary(value: unknown): StudentProgressSummary {
+export function parseCompletionDetails(value: unknown): StudentCompletionDetails {
   const unwrapped = unwrap(value);
   if (!unwrapped || typeof unwrapped !== "object" || Array.isArray(unwrapped)) {
-    throw new Error("Unexpected progress summary response");
+    throw new Error("Unexpected completion details response");
   }
   const data = object(unwrapped);
   return {

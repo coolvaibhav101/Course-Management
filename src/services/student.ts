@@ -3,7 +3,8 @@ import {
   parseEnrolledCourses,
   parseCourseContent,
   parseCourseProgress,
-  parseProgressSummary,
+  parseCompletionDetails,
+  parseStudentAnnouncements,
 } from "./studentData";
 
 export type {
@@ -11,7 +12,8 @@ export type {
   StudentChapter,
   StudentCourseContent,
   StudentCourseProgress,
-  StudentProgressSummary,
+  StudentCompletionDetails,
+  StudentAnnouncement,
 } from "./studentData";
 
 export interface Assignment {
@@ -33,15 +35,6 @@ export interface CalendarEvent {
   zoom_link?: string;
 }
 
-export interface Message {
-  id: string;
-  from: string;
-  subject: string;
-  preview: string;
-  time: string;
-  read: boolean;
-}
-
 export interface Certificate {
   id: string;
   name: string;
@@ -50,7 +43,7 @@ export interface Certificate {
 
 /**
  * Student learning endpoints use the existing Bearer-token/refresh client.
- * TODO: confirm the unrelated assignments/calendar/messages/certificates APIs.
+ * TODO: confirm the unrelated assignments/calendar/certificates APIs.
  */
 
 export async function getEnrolledCourses() {
@@ -67,7 +60,7 @@ function requiredId(id: string, label: string) {
 
 export async function getCourseContent(courseId: string) {
   const response = await api.get(
-    `/courses/${requiredId(courseId, "Course ID")}/chapters/`,
+    `/courses/${requiredId(courseId, "Course ID")}/`,
     { cache: "no-store" },
   );
   return parseCourseContent(response.data, courseId);
@@ -90,11 +83,11 @@ export async function completeChapter(chapterId: string) {
   return response.data;
 }
 
-export async function getProgressSummary() {
-  const response = await api.get("/students/progress-summary/", {
+export async function getCompletionDetails() {
+  const response = await api.get("/students/completion-details/", {
     cache: "no-store",
   });
-  return parseProgressSummary(response.data);
+  return parseCompletionDetails(response.data);
 }
 
 export async function getAssignments() {
@@ -117,14 +110,9 @@ export async function getCalendarEvents() {
   }
 }
 
-export async function getStudentMessages() {
-  try {
-    const response = await api.get("/students/messages/");
-    return (response?.data ?? []) as Message[];
-  } catch (error) {
-    console.error("Failed to fetch messages:", error);
-    return [] as Message[];
-  }
+export async function getStudentAnnouncements() {
+  const response = await api.get("/announcements/", { cache: "no-store" });
+  return parseStudentAnnouncements(response.data);
 }
 
 export async function getCertificates() {

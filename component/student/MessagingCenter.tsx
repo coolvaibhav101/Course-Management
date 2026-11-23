@@ -2,55 +2,42 @@
 
 import { useEffect, useState } from "react";
 import { MessageSquare, HelpCircle } from "lucide-react";
-import { getStudentMessages, Message } from "@/src/services/student";
+import { getStudentAnnouncements, type StudentAnnouncement } from "@/src/services/student";
 import { SkeletonList } from "@/component/SkeletonLoader";
 
-const defaultMessages: Message[] = [
-  {
-    id: "1",
-    from: "Dr. Sarah Johnson",
-    subject: "Network Assignment Feedback",
-    preview:
-      "Great work on your topology design! I have a few suggestions...",
-    time: "2 hours ago",
-    read: false,
-  },
-  {
-    id: "2",
-    from: "Support Team",
-    subject: "LMS Access Confirmation",
-    preview: "Your LMS account has been successfully activated.",
-    time: "Yesterday",
-    read: true,
-  },
-  {
-    id: "3",
-    from: "Prof. Michael Chen",
-    subject: "Upcoming Python Session",
-    preview:
-      "Reminder: Our live session on control flow starts tomorrow at 2 PM.",
-    time: "2 days ago",
-    read: true,
-  },
-];
+function formatAnnouncementDate(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString();
+}
 
 export function MessagingCenter() {
-  const [messages, setMessages] = useState<Message[]>(defaultMessages);
+  const [announcements, setAnnouncements] = useState<StudentAnnouncement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchData = async () => {
+      setLoading(true);
+      setError("");
       try {
-        const data = await getStudentMessages();
-        if (data.length) setMessages(data);
+        const data = await getStudentAnnouncements();
+        if (!cancelled) setAnnouncements(data);
       } catch (error) {
-        console.error("Failed to fetch messages:", error);
+        console.error("Failed to fetch announcements:", error);
+        if (!cancelled) {
+          setAnnouncements([]);
+          setError("Announcements could not be loaded. Please try again.");
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-    fetchData();
-  }, []);
+    void fetchData();
+    return () => { cancelled = true; };
+  }, [attempt]);
 
   if (loading) {
     return (
@@ -74,21 +61,28 @@ export function MessagingCenter() {
           </div>
 
           <div className="space-y-2">
-            {messages.map((message) => (
+            {error ? (
+              <div role="alert" className="text-red-700">
+                <p>{error}</p>
+                <button type="button" onClick={() => setAttempt((value) => value + 1)} className="mt-2 underline">Retry</button>
+              </div>
+            ) : announcements.length === 0 ? (
+              <p className="text-sm text-gray-600">No announcements yet.</p>
+            ) : announcements.map((announcement) => (
               <div
-                key={message.id}
-                className={`p-4 rounded-lg border transition-colors cursor-pointer ${
-                  message.read
-                    ? "border-gray-200 hover:border-gray-300"
-                    : "border-indigo-200 bg-indigo-50 hover:border-indigo-300"
+                key={announcement.id}
+                className={`p-4 rounded-lg border ${
+                  announcement.is_read === false
+                    ? "border-indigo-200 bg-indigo-50"
+                    : "border-gray-200"
                 }`}
               >
                 <div className="flex items-start justify-between mb-2">
-                  <h3 className="text-gray-900 font-medium">{message.subject}</h3>
-                  <span className="text-xs text-gray-600">{message.time}</span>
+                  <h3 className="text-gray-900 font-medium">{announcement.title}</h3>
+                  <span className="text-xs text-gray-600">{formatAnnouncementDate(announcement.created_at)}</span>
                 </div>
-                <p className="text-sm text-gray-600 mb-1">{message.from}</p>
-                <p className="text-sm text-gray-600">{message.preview}</p>
+                {announcement.sender && <p className="text-sm text-gray-600 mb-1">{announcement.sender}</p>}
+                <p className="text-sm text-gray-600 whitespace-pre-wrap">{announcement.message}</p>
               </div>
             ))}
           </div>

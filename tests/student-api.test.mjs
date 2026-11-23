@@ -53,10 +53,10 @@ function setup(responses, servicePath = "src/services/student.ts") {
 test("all five endpoints use Bearer authorization and the selected IDs", async () => {
   const { service, calls } = setup([
     { body: { results: [{ id: "enrollment-1", course: { id: "course-1", title: "Networks" }, total_chapters: 2, completed_chapters: 1 }] } },
-    { body: [{ id: "chapter-2", title: "Second", order: 2, content: "<p>Hello</p>" }, { id: "chapter-1", title: "First", order: 1 }] },
+    { body: { id: "course-1", title: "Networks", chapters: [{ id: "chapter-2", title: "Second", order: 2, content: "<p>Hello</p>" }, { id: "chapter-1", title: "First", order: 1 }] } },
     { body: { total_chapters: 2, completed_chapter_ids: ["chapter-1"], progress_percentage: 50 } },
     { status: 204 },
-    { body: { total_courses: 1, completed_courses: 0, completed_chapters: 1, average_progress: 50 } },
+    { body: { student_id: "11111111-1111-4111-8111-111111111111", student_name: "student@example.com", total_courses: 9, completed_courses: 0, average_progress: 0 } },
   ]);
   const courses = await service.getEnrolledCourses();
   assert.equal(courses[0].id, "course-1");
@@ -66,14 +66,18 @@ test("all five endpoints use Bearer authorization and the selected IDs", async (
   const progress = await service.getCourseProgress(courses[0].id);
   assert.equal(progress.completed_chapters, 1);
   await service.completeChapter(content.chapters[1].id);
-  const summary = await service.getProgressSummary();
+  const summary = await service.getCompletionDetails();
+  assert.equal(summary.total_courses, 9);
   assert.equal(summary.completed_courses, 0);
+  assert.equal(summary.average_progress, 0);
+  assert.equal(summary.total_chapters, undefined);
+  assert.equal(summary.completed_chapters, undefined);
   assert.deepEqual(calls.map((call) => call.url), [
     "http://localhost:8000/api/students/my-courses/",
-    "http://localhost:8000/api/courses/course-1/chapters/",
+    "http://localhost:8000/api/courses/course-1/",
     "http://localhost:8000/api/students/course-1/progress/",
     "http://localhost:8000/api/students/complete-chapter/",
-    "http://localhost:8000/api/students/progress-summary/",
+    "http://localhost:8000/api/students/completion-details/",
   ]);
   assert.deepEqual(calls.map((call) => call.method), ["GET", "GET", "GET", "POST", "GET"]);
   assert.ok(calls.every((call) => call.headers.Authorization === "Bearer test-access"));
@@ -98,16 +102,18 @@ test("missing IDs are rejected without issuing requests; URL segments are encode
   await assert.rejects(service.completeChapter(""), /Chapter ID is required/);
   assert.equal(calls.length, 0);
   await service.getCourseContent("course/1");
-  assert.equal(calls[0].url, "http://localhost:8000/api/courses/course%2F1/chapters/");
+  assert.equal(calls[0].url, "http://localhost:8000/api/courses/course%2F1/");
 });
 
-test("course chapters preserve written content, media URLs, order, and the selected course ID", async () => {
-  const { service, calls } = setup([{ body: { results: [
+test("course details preserve metadata, chapter content, media URLs, and order", async () => {
+  const { service, calls } = setup([{ body: { data: { id: "course-1", title: "Django", description: "Learn Django", chapters: [
     { id: "chapter-2", title: "Second", content: "<h2>Second lesson</h2>", media_url: "https://example.com/lesson.mp4", order: 2 },
     { id: "chapter-1", title: "Introduction", content: "Django is very flexible framework.", media_url: null, order: 1 },
-  ] } }, { body: [] }, { body: { unexpected: [] } }]);
+  ] } } }, { body: { id: "course-2", title: "Empty course", chapters: [] } }, { body: { unexpected: [] } }]);
   const content = await service.getCourseContent("course-1");
   assert.equal(content.id, "course-1");
+  assert.equal(content.title, "Django");
+  assert.equal(content.description, "Learn Django");
   assert.deepEqual(Array.from(content.chapters, chapter => chapter.id), ["chapter-1", "chapter-2"]);
   assert.equal(content.chapters[0].title, "Introduction");
   assert.equal(content.chapters[0].content, "Django is very flexible framework.");
@@ -117,9 +123,9 @@ test("course chapters preserve written content, media URLs, order, and the selec
   await assert.rejects(service.getCourseContent("course-3"), /Unexpected chapters response/);
   assert.ok(calls.every(call => call.cache === "no-store" && call.headers.Authorization === "Bearer test-access"));
   assert.deepEqual(calls.map(call => call.url), [
-    "http://localhost:8000/api/courses/course-1/chapters/",
-    "http://localhost:8000/api/courses/course-2/chapters/",
-    "http://localhost:8000/api/courses/course-3/chapters/",
+    "http://localhost:8000/api/courses/course-1/",
+    "http://localhost:8000/api/courses/course-2/",
+    "http://localhost:8000/api/courses/course-3/",
   ]);
 });
 
@@ -129,7 +135,7 @@ test("an expired access token refreshes and retries the student request", async 
     { body: { access: "renewed-access" } },
     { body: { total_courses: 0 } },
   ]);
-  assert.equal((await service.getProgressSummary()).total_courses, 0);
+  assert.equal((await service.getCompletionDetails()).total_courses, 0);
   assert.equal(calls[1].url, "http://localhost:8000/api/auth/refresh/");
   assert.deepEqual(JSON.parse(calls[1].body), { refresh: "test-refresh" });
   assert.equal(calls[2].headers.Authorization, "Bearer renewed-access");
@@ -141,9 +147,47 @@ test("unknown progress fields stay unavailable instead of inventing values", asy
   const courses = await service.getEnrolledCourses();
   assert.equal(courses[0].progress, undefined);
   assert.equal(courses[0].total_chapters, undefined);
-  const summary = await service.getProgressSummary();
+  const summary = await service.getCompletionDetails();
   assert.equal(summary.average_progress, undefined);
   assert.equal(summary.completed_courses, undefined);
+});
+
+test("student inbox loads announcements with authorization and preserves announcement fields", async () => {
+  const { service, calls } = setup([{ body: { results: [
+    { id: "announcement-1", title: "Course update", message: "First line\nSecond line", created_at: "2026-11-23T14:00:00Z", created_by: { name: "Admin" }, is_read: false },
+    { id: "announcement-2", title: "Schedule", message: "New lesson available" },
+  ] } }]);
+  const announcements = await service.getStudentAnnouncements();
+  assert.equal(calls[0].url, "http://localhost:8000/api/announcements/");
+  assert.equal(calls[0].method, "GET");
+  assert.equal(calls[0].headers.Authorization, "Bearer test-access");
+  assert.equal(calls[0].cache, "no-store");
+  assert.equal(announcements[0].title, "Course update");
+  assert.equal(announcements[0].message, "First line\nSecond line");
+  assert.equal(announcements[0].created_at, "2026-11-23T14:00:00Z");
+  assert.equal(announcements[0].sender, "Admin");
+  assert.equal(announcements[0].is_read, false);
+  assert.equal(announcements[1].sender, undefined);
+  assert.equal(announcements[1].is_read, undefined);
+});
+
+test("empty announcements stay empty and request or malformed-response failures reach the inbox", async () => {
+  const { service } = setup([
+    { body: [] }, { status: 403, body: { message: "Forbidden" } }, { body: { unexpected: [] } },
+  ]);
+  assert.equal((await service.getStudentAnnouncements()).length, 0);
+  await assert.rejects(service.getStudentAnnouncements(), /Forbidden/);
+  await assert.rejects(service.getStudentAnnouncements(), /Unexpected announcements response/);
+});
+
+test("expired student announcement tokens refresh and retry the announcements endpoint", async () => {
+  const { service, calls } = setup([
+    { status: 401, body: { message: "Expired" } }, { body: { access: "renewed-access" } }, { body: [] },
+  ]);
+  assert.equal((await service.getStudentAnnouncements()).length, 0);
+  assert.equal(calls[1].url, "http://localhost:8000/api/auth/refresh/");
+  assert.equal(calls[2].url, "http://localhost:8000/api/announcements/");
+  assert.equal(calls[2].headers.Authorization, "Bearer renewed-access");
 });
 
 test("my-courses chapter_count maps positive, single, and zero counts without inventing progress", async () => {

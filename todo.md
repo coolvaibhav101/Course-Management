@@ -109,7 +109,7 @@
      - GET assignments
      - GET calendar / schedule
      - GET messages / announcements
-     - GET progress summary
+     - GET completion details
      - GET certificates
 
 4. If endpoints are not available yet, implement with configurable service hooks and clear TODO markers so they can be swapped later.

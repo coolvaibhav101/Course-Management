@@ -23,8 +23,15 @@ const UsersPage = () => {
     const fetchStudents = async () => {
       try {
         setIsLoading(true);
-        const response = await api.get("/students/progress-summary/");
-        const items = (response?.data ?? []) as unknown[];
+        const response = await api.get("/students/completion-details/", {
+          cache: "no-store",
+        });
+        const payload = response?.data as
+          | Record<string, unknown>
+          | unknown[]
+          | undefined;
+        const data = !Array.isArray(payload) ? (payload?.data ?? payload) : payload;
+        const items: unknown[] = Array.isArray(data) ? data : data ? [data] : [];
         const fetched: StudentProgress[] = items.map(
           (item: unknown) => {
             const student = item as Record<string, unknown>;
@@ -33,7 +40,7 @@ const UsersPage = () => {
               | Record<string, unknown>
               | undefined;
             return {
-              id: String(student.id ?? ""),
+              id: String(student.student_id ?? student.id ?? ""),
               name: String(
                 student.student_name ??
                   user?.name ??

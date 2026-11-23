@@ -19,7 +19,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   height = "auto",
   animation = "pulse",
 }) => {
-  const baseClasses = "bg-gray-200 dark:bg-gray-700";
+  const baseClasses = "bg-gray-200";
 
   const variantClasses = {
     rectangular: "rounded",
@@ -44,7 +44,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 // Card Skeleton
 export const SkeletonCard: React.FC = () => {
   return (
-    <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+    <div className="border border-gray-200 rounded-lg p-4 space-y-3">
       <Skeleton variant="rectangular" height="200px" />
       <Skeleton variant="text" width="60%" />
       <Skeleton variant="text" width="80%" />
@@ -127,7 +127,7 @@ export const SkeletonDashboard: React.FC = () => {
         {Array.from({ length: 4 }).map((_, i) => (
           <div
             key={i}
-            className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3"
+            className="border border-gray-200 rounded-lg p-4 space-y-3"
           >
             <Skeleton variant="text" width="60%" />
             <Skeleton variant="text" width="40%" height="28px" />
@@ -203,7 +203,7 @@ export const SkeletonPage: React.FC<SkeletonPageProps> = ({
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-2"
+                  className="border border-gray-200 rounded-lg p-4 space-y-2"
                 >
                   <Skeleton variant="text" width="150px" />
                   <Skeleton variant="text" width="100%" />

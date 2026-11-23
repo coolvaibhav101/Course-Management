@@ -1,58 +1,20 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useAuth } from "@/src/hooks/useAuth";
 import { useStudentLearning } from "@/src/hooks/useStudentLearning";
 import { StudentCourseCards } from "@/component/student/StudentCourseCards";
 import { SkeletonDashboard } from "@/component/SkeletonLoader";
 
 export function StudentDashboardHome() {
-  const { user } = useAuth();
   const { courses, summary, loading, errors, reload } = useStudentLearning();
 
   if (loading) {
     return <SkeletonDashboard />;
   }
 
-  const firstName = (user?.name ?? "Student").split(" ")[0];
-
   return (
     <div className="space-y-8">
       {errors.length > 0 && <div role="alert" className="bg-red-50 text-red-700 p-4 rounded-lg"><p>{errors.join(" ")}</p><button onClick={reload} className="mt-2 underline">Retry</button></div>}
-      {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-8 text-white">
-        <h2 className="text-2xl font-bold mb-2">Welcome back, {firstName}!</h2>
-        <p className="mb-6">Ready to power up your brain today?</p>
-
-        <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4 mb-4">
-          <div className="flex items-center gap-3 mb-3">
-            <Sparkles className="w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Ask me anything about your studies"
-              className="flex-1 bg-transparent border-none outline-none text-white placeholder-white/70"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {[
-              "Concept explainer",
-              "Practice Partner",
-              "Lesson Summary",
-              "Progress Insight",
-              "Quiz Generator",
-            ].map((tag) => (
-              <span
-                key={tag}
-                className="px-3 py-1 bg-white/20 rounded-full text-sm"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[

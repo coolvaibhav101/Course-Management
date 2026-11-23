@@ -13,23 +13,19 @@ import {
   Loader2,
 } from "lucide-react";
 import api from "@/src/utils/connection";
+import { getStudents, type Student } from "@/src/services/students";
 
 interface CreateAnnouncementProps {
   userRole: "super-admin" | "org-admin";
   organizationName?: string;
+  organizationId?: string;
   onSave: () => void;
   onCancel: () => void;
 }
 
-const mockStudents = [
-  { id: "1", name: "Hannah Martinez", org: "Tech Academy" },
-  { id: "2", name: "John Smith", org: "Tech Academy" },
-  { id: "3", name: "Sarah Johnson", org: "Business Institute" },
-  { id: "4", name: "Mike Davis", org: "Creative School" },
-];
-
 const audienceTypeMap: Record<string, string> = {
-  "all-students": "ALL_STUDENT",
+  "all-students": "ALL_STUDENTS",
+  "specific-students": "SPECIFIC_STUDENTS",
   "all-organizations": "ALL_ORGANIZATIONS",
   "specific-organizations": "SPECIFIC_ORGANIZATIONS",
   both: "BOTH",
@@ -37,6 +33,7 @@ const audienceTypeMap: Record<string, string> = {
 
 const audienceOptions = [
   { value: "all-students", label: "All Students" },
+  { value: "specific-students", label: "Specific Students" },
   { value: "all-organizations", label: "All Organizations" },
   { value: "specific-organizations", label: "Specific Organization(s)" },
   { value: "both", label: "Specific Organizations & Students" },
@@ -78,6 +75,7 @@ const reactSelectStyles: StylesConfig<{ value: string; label: string }, false> =
 export function CreateAnnouncement({
   userRole,
   organizationName,
+  organizationId,
   onSave,
   onCancel,
 }: CreateAnnouncementProps) {
@@ -93,6 +91,35 @@ export function CreateAnnouncement({
   >([]);
   const [isLoadingOrgs, setIsLoadingOrgs] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [studentLoadError, setStudentLoadError] = useState("");
+  const [studentLoadAttempt, setStudentLoadAttempt] = useState(0);
+  const needsStudents = formData.audienceType === "specific-students" || formData.audienceType === "both";
+
+  useEffect(() => {
+    if (!needsStudents) return;
+    let cancelled = false;
+    async function loadStudents() {
+      setIsLoadingStudents(true);
+      setStudentLoadError("");
+      try {
+        const fetched = await getStudents(userRole === "org-admin" ? organizationId : undefined);
+        if (!cancelled) setStudents(fetched);
+      } catch (error) {
+        console.error("Failed to fetch announcement recipients:", error);
+        if (!cancelled) {
+          setStudents([]);
+          setStudentLoadError("Students could not be loaded. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setIsLoadingStudents(false);
+      }
+    }
+    void loadStudents();
+    return () => { cancelled = true; };
+  }, [needsStudents, userRole, organizationId, studentLoadAttempt]);
 
   useEffect(() => {
     const fetchOrganizations = async () => {
@@ -123,10 +150,12 @@ export function CreateAnnouncement({
       ? organizations.filter((org) => org.name === organizationName)
       : organizations;
 
-  const availableStudents =
-    userRole === "org-admin" && organizationName
-      ? mockStudents.filter((s) => s.org === organizationName)
-      : mockStudents;
+  const availableStudents = students.filter((student) => {
+    const matchesOrganization = userRole !== "org-admin" || organizationId || !organizationName ||
+      student.organization_name === organizationName;
+    const matchesSearch = `${student.name} ${student.email}`.toLowerCase().includes(studentSearch.trim().toLowerCase());
+    return matchesOrganization && matchesSearch;
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +183,7 @@ export function CreateAnnouncement({
       payload.organization_ids = formData.selectedOrganizations;
     }
 
-    if (formData.audienceType === "both") {
+    if (needsStudents) {
       if (formData.selectedStudents.length === 0) {
         toast.error("Please select at least one student");
         return;
@@ -324,7 +353,7 @@ export function CreateAnnouncement({
               )}
 
               {/* Conditional: Select Students */}
-              {formData.audienceType === "both" && (
+              {needsStudents && (
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Select Students
@@ -333,10 +362,22 @@ export function CreateAnnouncement({
                     <input
                       type="text"
                       placeholder="Search students..."
+                      value={studentSearch}
+                      onChange={(e) => setStudentSearch(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     />
                   </div>
-                    <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto bg-gray-50">
+                  <div className="border border-gray-300 rounded-lg p-4 max-h-64 overflow-y-auto bg-gray-50">
+                    {isLoadingStudents ? (
+                      <div className="flex items-center justify-center py-4 text-gray-500">
+                        <Loader2 className="w-5 h-5 animate-spin mr-2" />Loading students...
+                      </div>
+                    ) : studentLoadError ? (
+                      <div role="alert" className="text-red-700 text-sm">
+                        <p>{studentLoadError}</p>
+                        <button type="button" onClick={() => setStudentLoadAttempt((value) => value + 1)} className="mt-2 underline">Retry</button>
+                      </div>
+                    ) : (
                     <div className="space-y-2">
                       {availableStudents.map((student) => (
                         <label
@@ -357,7 +398,7 @@ export function CreateAnnouncement({
                               {student.name}
                             </span>
                             <span className="text-gray-500 text-sm ml-2">
-                              ({student.org})
+                              ({student.organization_name ?? organizations.find((org) => org.id === student.organization_id)?.name ?? "Unknown Organization"})
                             </span>
                           </div>
                         </label>
@@ -368,6 +409,7 @@ export function CreateAnnouncement({
                         </p>
                       )}
                     </div>
+                    )}
                   </div>
                   <p className="text-gray-500 mt-2">
                     {formData.selectedStudents.length > 0 && (
@@ -453,6 +495,12 @@ Administration Team"
                       <>
                         <Building2 className="w-4 h-4 text-purple-600" />
                         <span className="text-gray-900">All Organizations</span>
+                      </>
+                    )}
+                    {formData.audienceType === "specific-students" && (
+                      <>
+                        <User className="w-4 h-4 text-purple-600" />
+                        <span className="text-gray-900">{formData.selectedStudents.length || "No"} Student(s)</span>
                       </>
                     )}
                     {formData.audienceType === "specific-organizations" && (

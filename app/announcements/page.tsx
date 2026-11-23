@@ -144,6 +144,7 @@ const AnnouncementsPage = () => {
       <CreateAnnouncement
         userRole={role === roleKeys.SUPER_ADMIN ? "super-admin" : "org-admin"}
         organizationName={user?.organizationName || user?.name}
+        organizationId={user?.organizationId}
         onSave={handleSave}
         onCancel={() => setView("list")}
       />
