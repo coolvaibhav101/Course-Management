@@ -15,6 +15,7 @@ URL includes `/api` and has no trailing slash. Endpoint paths are relative to it
 | --- | --- | --- |
 | GET | `/students/my-courses/` | Student courses, dashboard, analytics |
 | GET | `/courses/{courseId}/` | Student course viewer |
+| GET | `/courses/{courseId}/chapters/{chapterId}/video-url/` | Selected chapter video in viewer and editor |
 | GET | `/students/{courseId}/progress/` | Course viewer and refresh after completion |
 | POST | `/students/complete-chapter/` | Mark Chapter Complete |
 | GET | `/students/completion-details/` | Student dashboard and analytics totals |
@@ -35,10 +36,26 @@ shows a retry action and disables further completion until progress is available
 Student course content loads with GET `/courses/{courseId}/` using the selected
 course ID and Bearer authorization. Chapters are read from the course details
 response. The course editor also uses GET `/courses/{courseId}/` to load and refresh
-chapters, and POST `/courses/{courseId}/chapters/` to save a chapter. Saves send the existing
-multipart fields: `title`, `content`, `order`, and optional video files.
+chapters. New chapters use POST `/courses/{courseId}/chapters/` with `title`,
+`content`, `order`, and an optional `video` file. Existing chapters use PUT
+`/courses/{courseId}/chapters/{chapterId}/` with only changed fields. Video-only
+updates send only `video`; unchanged saves make no update request. Course detail
+updates also use PUT with only changed `title` or `description` fields.
 The API's trailing slash is required: a slashless POST receives a 301 redirect,
 which converts the browser request to GET and drops its body.
+
+Chapter order is assigned automatically. Drag a chapter handle, use Arrow Up/Down
+on the focused handle, or use the move buttons to change its position. Each move
+saves chapter IDs and orders through POST `/courses/{courseId}/chapters/reorder/`
+with `{ "chapters": [{ "id": "<chapter ID>", "order": 1 }] }`. Unsaved chapters
+stay local, and reordering does not publish draft text or upload a selected video.
+The reorder request updates the positions together. A failed save restores the
+original order through the same endpoint; if recovery also
+fails, Reload order fetches server positions while preserving local edits.
+Deleting a saved chapter uses DELETE `/courses/{courseId}/chapters/{chapterId}/`
+before renumbering the remaining chapters. Discarding an unsaved chapter also
+renumbers the list. The unsaved-changes dialog blocks reordering until resolved;
+failed order recovery keeps the editor open so Reload order remains available.
 
 The student inbox displays announcement `title`, `message`, and `created_at`,
 with sender and read status only when provided. Announcement lists may be arrays,
@@ -54,8 +71,17 @@ The mapper uses `progress_percent` for course percentages, including zero, and
 Course Progress even when the completion-details request fails.
 Cards show the chapter count beneath the title,
 including zero, and use “1 chapter” for a single chapter. A missing count is omitted.
-The supplied chapter response confirms `id`, `title`, `content`, `media_url`
-(which may be null), and `order`.
+The supplied chapter response confirms `id`, `title`, `content`, `order`, and
+the boolean `has_video`. Both the student viewer and course editor use this flag
+to identify video chapters. They fetch a video's URL only for the selected saved
+chapter using GET `/courses/{courseId}/chapters/{chapterId}/video-url/`.
+The URL request is uncached, obsolete requests are cancelled, and a video load
+or playback failure offers Retry video to fetch a fresh URL.
+The editor shows Remove video and Replace video alongside an attached video.
+Removal stays pending until Save Chapter sends `video: null` through the chapter
+PUT endpoint; Undo removal restores the original preview. Selecting a replacement
+sends the new `video` file instead. Cancelling selection restores the original,
+and video-only changes participate in the unsaved-changes dialog.
 The completion-details response confirms `student_id`, `student_name`,
 `total_courses`, `completed_courses`, and `average_progress`. Dashboard and
 Analytics use the three numeric fields, including zero. This response does not
@@ -73,8 +99,10 @@ Current mapping accepts:
 - Course details as `{ "id": "...", "title": "...", "description": "...", "chapters": [...] }`,
   optionally inside `data`. The mapper also accepts chapter arrays or `{ "results": [...] }`, with
   optional nested course metadata. Chapters use `id`/`chapter_id`, `title`,
-  `content`, `order`, optional `video`/`video_url`/`media_url`, and optional
-  completion flags.
+  `content`, `order`, `has_video`, and optional completion flags.
+- Video URL responses as `{ "video_url": "https://..." }`, `{ "url": "https://..." }`,
+  optionally inside `data`, or a direct HTTP(S) URL string. Video URLs are not
+  taken from course content responses.
 - Progress as an object with `progress_percentage`, `completion_percentage`, or
   `progress`, optional `total_chapters` and `completed_chapters`, and optional
   `completed_chapter_ids` or per-chapter completion records.

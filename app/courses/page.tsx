@@ -84,10 +84,10 @@ const AdminCourses = () => {
       }
     };
 
-    if (isAuthenticated) {
+    if (isAuthenticated && !isEdit.status) {
       fetchData();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isEdit.status]);
 
   if (loading) {
     return (

@@ -5,6 +5,7 @@ import {
   parseCourseProgress,
   parseCompletionDetails,
   parseStudentAnnouncements,
+  parseChapterVideoUrl,
 } from "./studentData";
 
 export type {
@@ -72,6 +73,14 @@ export async function getCourseProgress(courseId: string) {
     { cache: "no-store" },
   );
   return parseCourseProgress(response.data, courseId);
+}
+
+export async function getChapterVideoUrl(courseId: string, chapterId: string, signal?: AbortSignal) {
+  const response = await api.get(
+    `/courses/${requiredId(courseId, "Course ID")}/chapters/${requiredId(chapterId, "Chapter ID")}/video-url/`,
+    { cache: "no-store", signal },
+  );
+  return parseChapterVideoUrl(response.data);
 }
 
 export async function completeChapter(chapterId: string) {

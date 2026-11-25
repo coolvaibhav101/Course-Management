@@ -18,7 +18,7 @@ export interface StudentChapter {
   title: string;
   content: string;
   order: number;
-  video_url?: string;
+  has_video: boolean;
   is_completed: boolean;
 }
 
@@ -168,7 +168,7 @@ export function parseCourseContent(value: unknown, courseId: string): StudentCou
       title: text(chapter.title) || `Chapter ${index + 1}`,
       content: text(chapter.content),
       order: number(chapter.order) ?? index + 1,
-      video_url: text(chapter.video_url ?? chapter.video ?? chapter.media_url) || undefined,
+      has_video: chapter.has_video === true,
       is_completed: completed(chapter.is_completed ?? chapter.completed ?? chapter.status),
     };
   }).sort((a, b) => a.order - b.order);
@@ -178,6 +178,17 @@ export function parseCourseContent(value: unknown, courseId: string): StudentCou
     description: text(metadata.description),
     chapters,
   };
+}
+
+export function parseChapterVideoUrl(value: unknown): string {
+  const unwrapped = unwrap(value);
+  const data = object(unwrapped);
+  const url = text(typeof unwrapped === "string" ? unwrapped : data.video_url ?? data.url).trim();
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") return url;
+  } catch { /* Report invalid or missing URLs as a failed video load. */ }
+  throw new Error("The video URL response does not contain a usable video URL");
 }
 
 export function parseCourseProgress(value: unknown, courseId: string): StudentCourseProgress {

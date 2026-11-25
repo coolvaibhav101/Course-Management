@@ -238,18 +238,12 @@ export const api = {
     request<T>(endpoint, {
       ...config,
       method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
-    }),
-
-  patch: <T = unknown>(
-    endpoint: string,
-    body?: unknown,
-    config?: RequestConfig,
-  ) =>
-    request<T>(endpoint, {
-      ...config,
-      method: "PATCH",
-      body: body ? JSON.stringify(body) : undefined,
+      body:
+        body instanceof FormData
+          ? body
+          : body
+            ? JSON.stringify(body)
+            : undefined,
     }),
 
   delete: <T = unknown>(endpoint: string, config?: RequestConfig) =>

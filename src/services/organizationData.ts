@@ -66,9 +66,14 @@ export function organizationToForm(organization: Organization): OrganizationForm
   };
 }
 
-/** Organization edits update details; courses are added through their own endpoint. */
-export function organizationPayload(data: OrganizationFormData, isNew: boolean) {
-  return {
+export type OrganizationPayload = Partial<Pick<OrganizationFormData, 'name' | 'description' | 'student_limit' | 'expiry_date' | 'status'>> & {
+  org_admin?: Partial<OrganizationFormData['org_admin']>;
+  course_ids?: string[];
+};
+
+/** Organization edits send changed details; courses use their own endpoint. */
+export function organizationPayload(data: OrganizationFormData, isNew: boolean, original?: OrganizationFormData): OrganizationPayload {
+  const fields = {
     name: data.name.trim(),
     description: data.description?.trim() || '',
     student_limit: data.student_limit,
@@ -80,6 +85,16 @@ export function organizationPayload(data: OrganizationFormData, isNew: boolean) 
       phone: data.org_admin.phone.trim(),
       ...(data.org_admin.temp_password ? { temp_password: data.org_admin.temp_password } : {}),
     },
-    ...(isNew ? { course_ids: data.course_ids ?? [] } : {}),
   };
+  if (isNew) return { ...fields, course_ids: data.course_ids ?? [] };
+  if (!original) throw new Error('Original organization details are required for an update.');
+  const baseline = organizationPayload(original, true);
+  const updates = Object.fromEntries(Object.entries(fields).filter(([key, value]) =>
+    key !== 'org_admin' && value !== baseline[key as keyof OrganizationPayload],
+  )) as OrganizationPayload;
+  const adminUpdates = Object.fromEntries(Object.entries(fields.org_admin).filter(([key, value]) =>
+    value !== baseline.org_admin?.[key as keyof OrganizationFormData['org_admin']],
+  ));
+  if (Object.keys(adminUpdates).length) updates.org_admin = adminUpdates;
+  return updates;
 }

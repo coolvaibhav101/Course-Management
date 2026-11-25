@@ -89,10 +89,9 @@ const RichTextInput = ({
             <style>
               {`
                   .quill-resizable {
-                    resize: vertical;
-                    overflow: auto;
+                    overflow: visible;
                     min-height: 160px;
-                    max-height: 70vh;
+                    height: auto;
                     border: 1px solid #ced4da;
                     border-radius: 8px;
                     padding: 0;
@@ -102,9 +101,8 @@ const RichTextInput = ({
                   }
 
                   .quill-custom .ql-toolbar {
-                    position: sticky;
-                    top: 0;
-                    z-index: 10;
+                    position: relative;
+                    z-index: 1;
                     background-color: white;
                     border-top-left-radius: 8px;
                     border-top-right-radius: 8px;
@@ -119,12 +117,14 @@ const RichTextInput = ({
 
                   .quill-custom .ql-container {
                     border: none;
-                    flex-grow: 1;
-                    overflow-y: auto;
+                    height: auto;
+                    overflow: visible;
                   }
 
                   .quill-custom .ql-editor {
-                    height: 100%;
+                    height: auto;
+                    min-height: 160px;
+                    overflow-y: visible;
                     color: black;
                   }
 
@@ -136,7 +136,7 @@ const RichTextInput = ({
                 `}
             </style>
             <div className="quill-resizable">
-              <div className="quill-custom" style={{ height: "100%" }}>
+              <div className="quill-custom" style={{ height: "auto" }}>
                 <ReactQuill
                   ref={quillRef}
                   value={value}

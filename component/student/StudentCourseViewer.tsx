@@ -3,17 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import DOMPurify from "dompurify";
-import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Circle, Loader2, PlayCircle, Timer, Video } from "lucide-react";
 import { completeChapter, getCourseContent, getCourseProgress, StudentCourseContent, StudentCourseProgress } from "@/src/services/student";
 import { SkeletonDashboard } from "@/component/SkeletonLoader";
-
-function safeVideoUrl(value?: string) {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value, window.location.origin);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
-  } catch { return undefined; }
-}
+import { useChapterVideo } from "@/src/hooks/useChapterVideo";
+import { useCourseStickyLayout } from "@/src/hooks/useCourseStickyLayout";
+import { useAutoChapterCompletion } from "@/src/hooks/useAutoChapterCompletion";
+import { useChapterVideoWatch } from "@/src/hooks/useChapterVideoWatch";
+import styles from "./StudentCourseViewer.module.css";
 
 export function StudentCourseViewer({ courseId }: { courseId: string }) {
   const [content, setContent] = useState<StudentCourseContent | null>(null);
@@ -27,6 +24,11 @@ export function StudentCourseViewer({ courseId }: { courseId: string }) {
   const [attempt, setAttempt] = useState(0);
   const completionPending = useRef(false);
   const lifecycle = useRef<AbortController | null>(null);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+  const articleRef = useRef<HTMLElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const completionRef = useRef<HTMLDivElement | null>(null);
   const reload = useCallback(() => setAttempt((value) => value + 1), []);
 
   useEffect(() => {
@@ -61,14 +63,32 @@ export function StudentCourseViewer({ courseId }: { courseId: string }) {
   }, [courseId, attempt]);
 
   const chapter = content?.chapters.find((item) => item.id === selectedId);
+  const video = useChapterVideo(courseId, chapter?.id, !loading && content?.id === courseId && chapter?.has_video === true);
   const isComplete = (id: string) => Boolean(content?.chapters.find((item) => item.id === id)?.is_completed || progress?.completed_chapter_ids.includes(id));
   const knownCompleted = content?.chapters.filter((item) => isComplete(item.id)).length ?? 0;
   const total = progress?.total_chapters ?? content?.chapters.length ?? 0;
   const done = progress?.completed_chapters ?? knownCompleted;
   const percent = progress?.progress ?? (total ? Math.min(100, done / total * 100) : 0);
+  const displayPercent = Math.round(Math.min(100, Math.max(0, percent)));
+  const chapterKey = JSON.stringify([courseId, chapter?.id]);
+  const videoWatch = useChapterVideoWatch(chapterKey, video.videoUrl, Boolean(chapter && isComplete(chapter.id)), markComplete);
+  const videoRequired = Boolean(chapter?.has_video && !isComplete(chapter.id) && !videoWatch.finished);
+  useCourseStickyLayout(headerRef, sidebarRef, !loading && Boolean(content?.chapters.length));
+  const autoCompletionEnabled = Boolean(chapter && !chapter.has_video && content?.id === courseId && !loading && !saving && progress && !isComplete(chapter.id) && !completionError);
+  const remainingSeconds = useAutoChapterCompletion(completionRef, chapterKey, autoCompletionEnabled, markComplete);
+
+  function selectChapter(id: string, focusHeading = false) {
+    setSelectedId(id);
+    setCompletionError("");
+    if (typeof window !== "undefined") window.requestAnimationFrame(() => {
+      articleRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+      if (focusHeading) headingRef.current?.focus({ preventScroll: true });
+    });
+  }
 
   async function markComplete() {
     if (!chapter || saving || completionPending.current || !progress || isComplete(chapter.id)) return;
+    if (chapter.has_video && !videoWatch.canComplete()) return;
     completionPending.current = true;
     setSaving(true);
     setCompletionError("");
@@ -99,42 +119,91 @@ export function StudentCourseViewer({ courseId }: { courseId: string }) {
   }
 
   if (loading) return <SkeletonDashboard />;
-  const videoUrl = safeVideoUrl(chapter?.video_url);
   return (
-    <div className="space-y-6">
-      <Link href="/courses" className="inline-flex items-center gap-2 text-purple-600"><ArrowLeft className="w-4 h-4" />Back to courses</Link>
-      {error ? (
-        <div role="alert" className="bg-red-50 text-red-700 rounded-lg p-6"><p>{error}</p><button onClick={reload} className="mt-3 underline">Retry</button></div>
-      ) : content && (
-        <>
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
-            <h1 className="text-2xl font-bold text-gray-900">{content.title}</h1>
-            {content.description && <p className="text-gray-600 mt-2">{content.description}</p>}
-            {progress && <p className="text-purple-700 mt-4">{done} of {total} chapters completed · {Math.round(percent)}%</p>}
-            {progressError && <div role="alert" className="text-amber-800 mt-3"><p>{progressError}</p><button onClick={reload} className="underline" disabled={saving}>Retry progress</button></div>}
+    <div className={styles.shell} data-course-layout data-course-viewer>
+      <div ref={headerRef} data-course-header className={styles.header}>
+        <div className={styles.headerInner}>
+          <div className="min-w-0">
+            <Link href="/courses" className={styles.backLink}>
+              <ArrowLeft className="h-4 w-4" />Back to courses
+            </Link>
+            {content && <h1 title={content.title} className={styles.courseTitle}>{content.title}</h1>}
           </div>
-          {content.chapters.length === 0 ? <p className="text-gray-600">No chapters available yet.</p> : (
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-              <nav aria-label="Course chapters" className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
-                {content.chapters.map((item) => (
-                  <button key={item.id} onClick={() => { setSelectedId(item.id); setCompletionError(""); }} disabled={saving} aria-current={item.id === selectedId ? "step" : undefined} className={`w-full text-left flex items-center gap-2 rounded-lg p-3 disabled:opacity-60 ${item.id === selectedId ? "bg-purple-100 text-purple-900" : "text-gray-700 hover:bg-gray-50"}`}>
-                    {isComplete(item.id) && <CheckCircle2 aria-label="Completed" className="w-4 h-4 shrink-0 text-green-600" />}{item.title}
-                  </button>
-                ))}
-              </nav>
-              {chapter && <article className="lg:col-span-3 bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-                <h2 className="text-xl font-semibold text-gray-900">{chapter.title}</h2>
-                {videoUrl && <video key={videoUrl} src={videoUrl} controls preload="metadata" className="w-full rounded-lg" />}
-                {chapter.content ? <div className="text-gray-800 break-words [&_a]:text-purple-600 [&_a]:underline [&_img]:max-w-full [&_h2]:text-xl [&_ul]:list-disc [&_ul]:pl-6" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(chapter.content) }} /> : <p className="text-gray-500">No written content for this chapter.</p>}
-                {completionError && <p role="alert" className="text-red-700">{completionError}</p>}
-                <button onClick={markComplete} disabled={saving || !progress || isComplete(chapter.id)} className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{isComplete(chapter.id) ? "Completed" : saving ? "Saving…" : "Mark Chapter Complete"}
-                </button>
-              </article>}
+          {progress && content && <div className={styles.progressSummary}>
+            <p className={styles.progressLabel}>
+              <span>{done} of {total} chapters completed</span>
+              <span className={styles.progressPercent}>{displayPercent}%</span>
+            </p>
+            <div className={styles.progressTrack} role="progressbar" aria-label="Course completion" aria-valuemin={0} aria-valuemax={100} aria-valuenow={displayPercent} aria-valuetext={done + " of " + total + " chapters completed"}>
+              <div className={styles.progressFill} style={{ width: displayPercent + "%" }} />
             </div>
-          )}
-        </>
-      )}
+          </div>}
+        </div>
+      </div>
+      <div className={styles.workspace}>
+        {error ? (
+          <div role="alert" className={styles.notice + " " + styles.error}>
+            <p>{error}</p><button type="button" onClick={reload} className={styles.retry}>Retry</button>
+          </div>
+        ) : content && (
+          <>
+            {content.description && <p className={styles.courseDescription}>{content.description}</p>}
+            {progressError && <div role="alert" className={styles.notice + " " + styles.warning}>
+              <p>{progressError}</p><button type="button" onClick={reload} className={styles.retry} disabled={saving}>Retry progress</button>
+            </div>}
+            {content.chapters.length === 0 ? <p className={styles.empty}>No chapters available yet.</p> : (
+              <>
+                <nav ref={sidebarRef} data-course-sidebar aria-label="Course chapters" className={styles.sidebar}>
+                  <h2 className={styles.sidebarHeading}>Chapters <span className="ml-1 font-normal text-slate-500">{content.chapters.length}</span></h2>
+                  <div className={styles.chapterList}>
+                    {content.chapters.map((item) => (
+                      <button key={item.id} type="button" onClick={(event) => selectChapter(item.id, event?.detail === 0)} disabled={saving} aria-current={item.id === selectedId ? "step" : undefined} className={styles.chapterButton}>
+                        {isComplete(item.id)
+                          ? <CheckCircle2 aria-label="Completed" className={styles.completedStatus + " h-4 w-4"} />
+                          : <Circle aria-hidden="true" className={styles.chapterStatus + " h-4 w-4"} />}
+                        <span className="min-w-0">
+                          <span className={styles.chapterTitle}>{item.title}</span>
+                          {item.has_video && <span className={styles.videoLabel}><Video aria-hidden="true" className="h-3 w-3" />Video</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </nav>
+                {chapter && <article ref={articleRef} data-course-article aria-labelledby="course-chapter-heading" className={styles.article}>
+                  <h2 ref={headingRef} id="course-chapter-heading" tabIndex={-1} className={styles.chapterHeading}>{chapter.title}</h2>
+                  {chapter.content ? <div className={styles.prose} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(chapter.content) }} /> : <p className="text-sm text-slate-500">No written content for this chapter.</p>}
+                  {chapter.has_video && <section aria-label="Chapter video" className={styles.videoSection}>
+                    <div className={styles.videoHeader}>
+                      <h3 className={styles.videoHeading}><PlayCircle aria-hidden="true" className="h-4 w-4" />Chapter video</h3>
+                      <span className={styles.watchStatus} data-watched={videoWatch.finished || isComplete(chapter.id)}>
+                        {isComplete(chapter.id) ? "Chapter completed" : videoWatch.finished ? "Video watched" : `${videoWatch.percent}% watched`}
+                      </span>
+                    </div>
+                    <p className={styles.videoHelp}>{isComplete(chapter.id) ? "Replay this lesson at any time." : "Watch the full video to complete this chapter. You can replay watched sections."}</p>
+                    {video.loading ? <p role="status" className={styles.videoLoading}><Loader2 className="h-4 w-4 animate-spin" />Loading video...</p>
+                      : video.error ? <div role="alert" className="text-sm text-red-700"><p>{video.error}</p><button type="button" onClick={video.retry} className={styles.retry}>Retry video</button></div>
+                      : video.videoUrl && <video key={chapter.id + ":" + video.videoUrl} src={video.videoUrl} onError={video.onPlaybackError} onLoadedMetadata={videoWatch.onLoadedMetadata} onTimeUpdate={videoWatch.onTimeUpdate} onSeeking={videoWatch.onSeeking} onEnded={videoWatch.onEnded} controls controlsList="nodownload" onContextMenu={(event) => event.preventDefault()} preload="metadata" className={styles.player} />}
+                    {video.videoUrl && <div className={styles.watchTrack} role="progressbar" aria-label="Video watched" aria-valuemin={0} aria-valuemax={100} aria-valuenow={isComplete(chapter.id) ? 100 : videoWatch.percent}>
+                      <div className={styles.watchFill} style={{ width: `${isComplete(chapter.id) ? 100 : videoWatch.percent}%` }} />
+                    </div>}
+                  </section>}
+                  <div ref={completionRef} data-course-completion className={styles.completionFooter}>
+                    {autoCompletionEnabled && <p role="status" data-auto-completion className={styles.countdown}>
+                      <Timer aria-hidden="true" className="h-4 w-4 shrink-0" />
+                      <span>{remainingSeconds === null ? "Stay here for 5 seconds to complete this chapter automatically." : `Completing automatically in ${remainingSeconds}s`}</span>
+                    </p>}
+                    {completionError && <p role="alert" className="text-sm text-red-700">{completionError}</p>}
+                    {videoRequired && <p className={styles.completionHint}>This chapter completes automatically after you finish watching the video.</p>}
+                    <button type="button" onClick={markComplete} disabled={saving || !progress || isComplete(chapter.id) || videoRequired} data-completed={isComplete(chapter.id)} className={styles.completeButton}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}{isComplete(chapter.id) ? "Completed" : saving ? "Saving..." : "Mark Chapter Complete"}
+                    </button>
+                  </div>
+                </article>}
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

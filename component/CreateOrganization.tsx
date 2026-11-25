@@ -21,6 +21,8 @@ interface CreateOrganizationProps {
 export function CreateOrganization({ onSave, onCancel, courseData, formData, setFormData, isEdit, onCoursesAssigned }: CreateOrganizationProps) {
   const data = formData;
   const isNew = Boolean(isEdit.isNew);
+  const originalDataRef = useRef<OrganizationFormData>({ ...data, org_admin: { ...data.org_admin } });
+  if (originalDataRef.current.id !== data.id) originalDataRef.current = { ...data, org_admin: { ...data.org_admin } };
   const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [assignedCourseIds, setAssignedCourseIds] = useState<string[]>(data.course_ids ?? []);
   const [isAssigning, setIsAssigning] = useState(false);
@@ -103,14 +105,18 @@ export function CreateOrganization({ onSave, onCancel, courseData, formData, set
     e.preventDefault();
     if (submissionPending.current || assignmentPending.current) return;
     setError('');
-    if (!data.name?.trim() || !data.org_admin?.name?.trim() || !data.org_admin?.email?.trim() ||
-        !data.org_admin?.phone?.trim() || !data.expiry_date ||
-        !Number.isInteger(data.student_limit) || data.student_limit < 1 ||
+    const payload = organizationPayload(data, isNew, originalDataRef.current);
+    if (!isNew && !Object.keys(payload).length) { toast.info('No changes to save'); return; }
+    if (((isNew || payload.name !== undefined) && !data.name?.trim()) ||
+        ((isNew || payload.org_admin?.name !== undefined) && !data.org_admin?.name?.trim()) ||
+        ((isNew || payload.org_admin?.email !== undefined) && !data.org_admin?.email?.trim()) ||
+        ((isNew || payload.org_admin?.phone !== undefined) && !data.org_admin?.phone?.trim()) ||
+        ((isNew || payload.expiry_date !== undefined) && !data.expiry_date) ||
+        ((isNew || payload.student_limit !== undefined) && (!Number.isInteger(data.student_limit) || data.student_limit < 1)) ||
         (isNew && !data.org_admin?.temp_password?.trim())) {
       setError('Please fill in the required fields and enter a valid student limit.');
       return;
     }
-    const payload = organizationPayload(data, isNew);
     try {
       submissionPending.current = true;
       setIsSubmitting(true);
@@ -119,8 +125,9 @@ export function CreateOrganization({ onSave, onCancel, courseData, formData, set
       } else {
         if (!data.id) throw new Error('Organization ID is missing.');
         // Update details only; course assignment has its own POST endpoint.
-        await api.patch(`/organizations/${encodeURIComponent(data.id)}/`, payload);
+        await api.put(`/organizations/${encodeURIComponent(data.id)}/`, payload);
       }
+      originalDataRef.current = { ...data, org_admin: { ...data.org_admin } };
       toast.success(isNew ? 'Organization created successfully' : 'Organization updated successfully');
       onSave();
     } catch (err) {

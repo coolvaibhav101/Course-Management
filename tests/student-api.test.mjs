@@ -15,7 +15,7 @@ function setup(responses, servicePath = "src/services/student.ts") {
   const storage = new Map([["auth_token", "test-access"], ["refresh_token", "test-refresh"]]);
   const cache = new Map();
   const context = vm.createContext({
-    console, Error, URLSearchParams, FormData, process: { env: { NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000/api" } },
+    console, Error, URL, URLSearchParams, FormData, process: { env: { NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000/api" } },
     window: { localStorage: null, location: { href: "" } },
     localStorage: {
       getItem: (key) => storage.get(key) ?? null,
@@ -84,6 +84,31 @@ test("all five endpoints use Bearer authorization and the selected IDs", async (
   assert.deepEqual(JSON.parse(calls[3].body), { chapter_id: "chapter-2" });
 });
 
+test("PUT chapter updates preserve multipart fields and let the browser set the upload boundary", async () => {
+  const { service: connection, calls } = setup([{ status: 204 }], "src/utils/connection.ts");
+  const payload = new FormData();
+  payload.append("title", "Chapter 5");
+  payload.append("content", "<p>Updated lesson</p>");
+  payload.append("order", "7");
+  payload.append("video", new Blob(["video-fixture"], { type: "video/mp4" }), "lesson.mp4");
+  await connection.api.put("/courses/course-1/chapters/chapter-5/", payload);
+  assert.equal(calls[0].url, "http://localhost:8000/api/courses/course-1/chapters/chapter-5/");
+  assert.equal(calls[0].method, "PUT");
+  assert.equal(calls[0].headers.Authorization, "Bearer test-access");
+  assert.equal(calls[0].headers["Content-Type"], undefined);
+  assert.equal(calls[0].body, payload);
+  assert.equal(calls[0].body.get("order"), "7");
+  assert.equal(calls[0].body.get("video").name, "lesson.mp4");
+  assert.equal(calls[0].body.has("media_url"), false);
+});
+
+test("PUT JSON requests keep their JSON body and content type", async () => {
+  const { service: connection, calls } = setup([{ status: 204 }], "src/utils/connection.ts");
+  await connection.api.put("/courses/course-1/", { title: "Updated course" });
+  assert.equal(calls[0].body, '{"title":"Updated course"}');
+  assert.equal(calls[0].headers["Content-Type"], "application/json");
+});
+
 test("request errors remain errors, while an empty course list remains empty", async () => {
   const { service } = setup([
     { body: [] }, { status: 403, body: { message: "Forbidden" } },
@@ -105,10 +130,10 @@ test("missing IDs are rejected without issuing requests; URL segments are encode
   assert.equal(calls[0].url, "http://localhost:8000/api/courses/course%2F1/");
 });
 
-test("course details preserve metadata, chapter content, media URLs, and order", async () => {
+test("course details preserve metadata, chapter content, has_video flags, and order", async () => {
   const { service, calls } = setup([{ body: { data: { id: "course-1", title: "Django", description: "Learn Django", chapters: [
-    { id: "chapter-2", title: "Second", content: "<h2>Second lesson</h2>", media_url: "https://example.com/lesson.mp4", order: 2 },
-    { id: "chapter-1", title: "Introduction", content: "Django is very flexible framework.", media_url: null, order: 1 },
+    { id: "chapter-2", title: "Second", content: "<h2>Second lesson</h2>", has_video: true, order: 2 },
+    { id: "chapter-1", title: "Introduction", content: "Django is very flexible framework.", has_video: false, video_url: "https://example.com/old.mp4", order: 1 },
   ] } } }, { body: { id: "course-2", title: "Empty course", chapters: [] } }, { body: { unexpected: [] } }]);
   const content = await service.getCourseContent("course-1");
   assert.equal(content.id, "course-1");
@@ -117,8 +142,9 @@ test("course details preserve metadata, chapter content, media URLs, and order",
   assert.deepEqual(Array.from(content.chapters, chapter => chapter.id), ["chapter-1", "chapter-2"]);
   assert.equal(content.chapters[0].title, "Introduction");
   assert.equal(content.chapters[0].content, "Django is very flexible framework.");
+  assert.equal(content.chapters[0].has_video, false);
+  assert.equal(content.chapters[1].has_video, true);
   assert.equal(content.chapters[0].video_url, undefined);
-  assert.equal(content.chapters[1].video_url, "https://example.com/lesson.mp4");
   assert.equal((await service.getCourseContent("course-2")).chapters.length, 0);
   await assert.rejects(service.getCourseContent("course-3"), /Unexpected chapters response/);
   assert.ok(calls.every(call => call.cache === "no-store" && call.headers.Authorization === "Bearer test-access"));
@@ -127,6 +153,26 @@ test("course details preserve metadata, chapter content, media URLs, and order",
     "http://localhost:8000/api/courses/course-2/",
     "http://localhost:8000/api/courses/course-3/",
   ]);
+});
+
+test("chapter video URLs use the selected IDs and authenticated uncached endpoint", async () => {
+  const { service, calls } = setup([{ body: { video_url: "https://cdn.example.com/lesson.mp4?token=test" } }]);
+  assert.equal(await service.getChapterVideoUrl("course/1", "chapter/2"), "https://cdn.example.com/lesson.mp4?token=test");
+  assert.equal(calls[0].url, "http://localhost:8000/api/courses/course%2F1/chapters/chapter%2F2/video-url/");
+  assert.equal(calls[0].headers.Authorization, "Bearer test-access");
+  assert.equal(calls[0].cache, "no-store");
+});
+
+test("video URL requests reject missing IDs before fetching and propagate unusable URLs or server failures", async () => {
+  const { service, calls } = setup([
+    { body: { video_url: "javascript:alert(1)" } }, { body: {} }, { status: 403, body: { message: "Forbidden" } },
+  ]);
+  await assert.rejects(service.getChapterVideoUrl("", "chapter-1"), /Course ID is required/);
+  await assert.rejects(service.getChapterVideoUrl("course-1", ""), /Chapter ID is required/);
+  assert.equal(calls.length, 0);
+  await assert.rejects(service.getChapterVideoUrl("course-1", "chapter-1"), /video URL/i);
+  await assert.rejects(service.getChapterVideoUrl("course-1", "chapter-1"), /video URL/i);
+  await assert.rejects(service.getChapterVideoUrl("course-1", "chapter-1"), /Forbidden/);
 });
 
 test("an expired access token refreshes and retries the student request", async () => {
