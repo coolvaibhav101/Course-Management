@@ -125,7 +125,7 @@ export function CreateOrganization({ onSave, onCancel, courseData, formData, set
       } else {
         if (!data.id) throw new Error('Organization ID is missing.');
         // Update details only; course assignment has its own POST endpoint.
-        await api.put(`/organizations/${encodeURIComponent(data.id)}/`, payload);
+        await api.patch(`/organizations/${encodeURIComponent(data.id)}/`, payload);
       }
       originalDataRef.current = { ...data, org_admin: { ...data.org_admin } };
       toast.success(isNew ? 'Organization created successfully' : 'Organization updated successfully');

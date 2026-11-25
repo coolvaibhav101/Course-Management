@@ -13,12 +13,15 @@ const original = [
 ];
 const plain = value => JSON.parse(JSON.stringify(value));
 
-function setup({ fail } = {}) {
+function setup({ fail, status = 500, errorData } = {}) {
+  class ApiError extends Error {
+    constructor(message, status, data) { super(message); this.status = status; this.data = data; }
+  }
   const chapters = new Map(original.map(chapter => [chapter.id, { ...chapter }]));
   const calls = [];
   const api = { post: async (url, data) => {
     calls.push({ url, body: plain(data) });
-    if (fail?.({ chapters: data.chapters, call: calls.length })) throw new Error("offline");
+    if (fail?.({ chapters: data.chapters, call: calls.length })) throw new ApiError("Request failed", status, errorData);
     assert.equal(new Set(data.chapters.map(chapter => chapter.order)).size, data.chapters.length);
     for (const { id, order } of data.chapters) chapters.set(id, { ...chapters.get(id), order });
   } };
@@ -28,7 +31,7 @@ function setup({ fail } = {}) {
   }).outputText;
   const exported = {};
   vm.runInNewContext(`(function(require, exports) {${compiled}\n})`, { FormData, Error, Map, Set })
-    (() => ({ default: api }), exported);
+    (() => ({ default: api, ApiError }), exported);
   return { ...exported, chapters, calls };
 }
 
@@ -61,16 +64,17 @@ test("unsaved chapter IDs are reordered locally without sending creation or upda
   assert.deepEqual([...chapters.values()].map(chapter => chapter.order), [2, 3, 4]);
 });
 
-test("a failed reorder restores the previous order through the bulk endpoint", async () => {
-  const { moveChapter, saveChapterOrder, chapters, calls } = setup({ fail: ({ call }) => call === 1 });
-  await assert.rejects(saveChapterOrder("course-1", original, moveChapter(original, "c", "a", "before")), error => error.restored === true);
+test("a rejected reorder keeps the previous order without sending a second POST", async () => {
+  const { moveChapter, saveChapterOrder, chapters, calls } = setup({ fail: () => true, status: 400, errorData: { detail: "Invalid chapter order." } });
+  await assert.rejects(saveChapterOrder("course-1", original, moveChapter(original, "c", "a", "before")), error => error.restored === true && error.message.includes("Invalid chapter order."));
   assert.deepEqual([...chapters.values()], original);
-  assert.deepEqual(calls[1].body.chapters, [{ id: "a", order: 1 }, { id: "b", order: 2 }, { id: "c", order: 3 }]);
+  assert.equal(calls.length, 1);
 });
 
-test("failed recovery is reported so the editor can reload server order before another move", async () => {
-  const { moveChapter, saveChapterOrder } = setup({ fail: () => true });
+test("an uncertain reorder failure requires reloading server order without another POST", async () => {
+  const { moveChapter, saveChapterOrder, calls } = setup({ fail: () => true });
   await assert.rejects(saveChapterOrder("course-1", original, moveChapter(original, "c", "a", "before")), error => error.restored === false);
+  assert.equal(calls.length, 1);
 });
 
 test("an unchanged order makes no update requests", async () => {

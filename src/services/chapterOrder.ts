@@ -1,4 +1,4 @@
-import api from "@/src/utils/connection";
+import api, { ApiError } from "@/src/utils/connection";
 
 export interface OrderedChapter {
   id: string;
@@ -24,10 +24,10 @@ export function moveChapter<T extends OrderedChapter>(
 }
 
 export class ChapterOrderSaveError extends Error {
-  constructor(public readonly restored: boolean) {
-    super(restored
-      ? "Chapter order could not be saved. The previous order was restored."
-      : "Chapter order could not be saved. Reload the current order before continuing.");
+  constructor(public readonly restored: boolean, reason?: string) {
+    super(`Chapter order could not be saved.${reason ? ` ${reason}` : ""} ${restored
+      ? "The previous order was kept."
+      : "Reload the current order before continuing."}`);
     this.name = "ChapterOrderSaveError";
   }
 }
@@ -49,14 +49,15 @@ export async function saveChapterOrder(
 
   try {
     await api.post(endpoint, payload(next));
-  } catch {
-    try {
-      // A lost response may follow a committed reorder; restore before retrying.
-      await api.post(endpoint, payload(previous));
-    } catch {
-      throw new ChapterOrderSaveError(false);
-    }
-    throw new ChapterOrderSaveError(true);
+  } catch (error) {
+    // A rejected request needs no second write; an uncertain result needs a read.
+    const rejected = error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408;
+    const data = error instanceof ApiError && error.data && typeof error.data === "object"
+      ? error.data as { detail?: unknown; message?: unknown } : undefined;
+    const reason = typeof data?.detail === "string" ? data.detail
+      : typeof data?.message === "string" ? data.message
+      : error instanceof Error ? error.message : undefined;
+    throw new ChapterOrderSaveError(rejected, reason);
   }
   return changed.length;
 }

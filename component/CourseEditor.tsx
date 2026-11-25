@@ -345,7 +345,7 @@ export function CourseEditor({
         const original = { title: ((formData.title as string) || "").trim(), description: ((formData.description as string) || "").trim() };
         const details = Object.fromEntries(Object.entries(current).filter(([key, value]) => value !== original[key as keyof typeof original]));
         if (Object.keys(details).length) {
-          await api.put(endpoint, details);
+          await api.patch(endpoint, details);
           setFormData({ ...formData, ...details });
           toast.success("Course updated");
         } else {

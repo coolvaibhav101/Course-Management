@@ -40,7 +40,7 @@ chapters. New chapters use POST `/courses/{courseId}/chapters/` with `title`,
 `content`, `order`, and an optional `video` file. Existing chapters use PUT
 `/courses/{courseId}/chapters/{chapterId}/` with only changed fields. Video-only
 updates send only `video`; unchanged saves make no update request. Course detail
-updates also use PUT with only changed `title` or `description` fields.
+updates use PATCH with only changed `title` or `description` fields.
 The API's trailing slash is required: a slashless POST receives a 301 redirect,
 which converts the browser request to GET and drops its body.
 
@@ -49,9 +49,10 @@ on the focused handle, or use the move buttons to change its position. Each move
 saves chapter IDs and orders through POST `/courses/{courseId}/chapters/reorder/`
 with `{ "chapters": [{ "id": "<chapter ID>", "order": 1 }] }`. Unsaved chapters
 stay local, and reordering does not publish draft text or upload a selected video.
-The reorder request updates the positions together. A failed save restores the
-original order through the same endpoint; if recovery also
-fails, Reload order fetches server positions while preserving local edits.
+The reorder request updates the positions together with one POST. A rejected
+save keeps the previous visible order and shows the server error without another
+reorder request. If a network or server failure leaves the result uncertain,
+Reload order fetches server positions while preserving local edits.
 Deleting a saved chapter uses DELETE `/courses/{courseId}/chapters/{chapterId}/`
 before renumbering the remaining chapters. Discarding an unsaved chapter also
 renumbers the list. The unsaved-changes dialog blocks reordering until resolved;

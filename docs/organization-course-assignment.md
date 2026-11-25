@@ -19,7 +19,7 @@ failed courses remain selected for retry. The organization list and its displaye
 course count refresh after successful writes. Known assigned courses cannot be
 unchecked because this endpoint supplies no removal operation.
 
-**Save Changes** uses PUT with only the changed organization fields. Nested
+**Save Changes** uses PATCH with only the changed organization fields. Nested
 `org_admin` includes only changed admin fields, and unchanged saves make no
 update request. Organization detail updates omit `course_ids`.
 Creating an organization continues to send selected `course_ids` in the creation

@@ -34,7 +34,10 @@ async function chapterAction(editor, label) {
   return editor.refresh();
 }
 
-async function setup({ fail, courseFail = false, strictEffects = false, courseLoad, videos = {}, viewer = false, automation = false, completionFail = false, progressFail = false, deleteFail = false, completed = [] } = {}) {
+async function setup({ fail, reorderStatus = 500, courseFail = false, strictEffects = false, courseLoad, videos = {}, viewer = false, automation = false, completionFail = false, progressFail = false, deleteFail = false, completed = [] } = {}) {
+  class ApiError extends Error {
+    constructor(message, status, data) { super(message); this.status = status; this.data = data; }
+  }
   let cursor = 0;
   let closed = 0;
   let saved = 0;
@@ -98,13 +101,13 @@ async function setup({ fail, courseFail = false, strictEffects = false, courseLo
       if (courseLoad) return courseLoad(url, courseLoads.length);
       return { data: { id: "course-1", chapters: [...server.values()].sort((a, b) => a.order - b.order) } };
     },
+    async patch(url, data) {
+      courseRequests.push({ method: "PATCH", url, body: data });
+      if (courseFail) throw new Error("Course update unavailable");
+      course = { ...course, ...data };
+      return { data: course };
+    },
     async put(url, data) {
-      if (url === "/courses/course-1/") {
-        courseRequests.push({ method: "PUT", url, body: data });
-        if (courseFail) throw new Error("Course update unavailable");
-        course = { ...course, ...data };
-        return { data: course };
-      }
       const fields = data instanceof FormData ? Object.fromEntries(data.entries()) : data;
       const id = decodeURIComponent(url.split("/").at(-2)), order = fields.order === undefined ? server.get(id).order : Number(fields.order);
       calls.push({ id, url, title: fields.title, order, content: fields.content, video: fields.video != null, body: data });
@@ -118,7 +121,7 @@ async function setup({ fail, courseFail = false, strictEffects = false, courseLo
     async post(url, data) {
       if (url === "/courses/course-1/chapters/reorder/") {
         calls.push({ id: "reorder", url, body: data });
-        if (data.chapters.some(({ id, order }) => fail?.({ id, order, call: calls.length }))) throw new Error("offline");
+        if (data.chapters.some(({ id, order }) => fail?.({ id, order, call: calls.length }))) throw new ApiError("Request failed", reorderStatus, { detail: "Invalid chapter order." });
         assert.equal(new Set(data.chapters.map(chapter => chapter.order)).size, data.chapters.length);
         for (const { id, order } of data.chapters) server.set(id, { ...server.get(id), order });
         return { data: {} };
@@ -150,7 +153,7 @@ async function setup({ fail, courseFail = false, strictEffects = false, courseLo
     const localRequire = name => {
       if (name === "react") return hooks;
       if (name === "sonner") return { toast: { success: message => notices.push(message), error: message => notices.push(message), info: message => notices.push(message) } };
-      if (name === "@/src/utils/connection") return api;
+      if (name === "@/src/utils/connection") return { __esModule: true, default: api, ApiError };
       if (name === "./RichText/RichTextInput") return () => null;
       if (name === "dompurify") return { sanitize: value => value };
       if (name.endsWith(".module.css")) return { __esModule: true, default: new Proxy({}, { get: (_target, key) => key }) };
@@ -257,7 +260,7 @@ test("editing course details updates the header and preserves unsaved chapter co
   await editor.button("Save course details").props.onClick();
   await editor.refresh();
   assert.equal(editor.course.title, "Updated course");
-  assert.deepEqual(JSON.parse(JSON.stringify(editor.courseRequests)), [{ method: "PUT", url: "/courses/course-1/", body: { title: "Updated course", description: "New description" } }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(editor.courseRequests)), [{ method: "PATCH", url: "/courses/course-1/", body: { title: "Updated course", description: "New description" } }]);
   assert.equal(editor.course.description, "New description");
   assert.ok(editor.nodes().some(node => node.type === "h1" && node.props.children === "Updated course"));
   assert.ok(editor.nodes().some(node => node.props?.value === "Unsaved lesson"));
@@ -622,21 +625,24 @@ test("keyboard and touch controls move chapters and keep boundary moves disabled
   assert.deepEqual(editor.nodes().filter(node => node.props?.onDrop).map(node => node.key), ["b", "c", "a"]);
 });
 
-test("a failed save restores the visible order and shows a useful error", async () => {
+test("a rejected reorder sends once, restores the visible order and shows the server error", async () => {
   let failed = false;
-  const editor = await setup({ fail: ({ id, order }) => { if (id === "c" && order === 2 && !failed) { failed = true; return true; } return false; } });
+  const editor = await setup({ reorderStatus: 400, fail: ({ id, order }) => { if (id === "c" && order === 2 && !failed) { failed = true; return true; } return false; } });
   editor.button("Move Third up").props.onClick();
   await editor.refresh();
   assert.deepEqual(editor.nodes().filter(node => node.props?.onDrop).map(node => node.key), ["a", "b", "c"]);
   assert.ok(editor.nodes().some(node => node.props?.role === "alert"));
   assert.equal(editor.button("Move Third up").props.disabled, false);
+  assert.equal(editor.calls.length, 1);
+  assert.ok(editor.nodes().some(node => node.props?.children?.includes?.("Invalid chapter order.")));
 });
 
-test("failed recovery disables further writes until the current server order is reloaded", async () => {
+test("an uncertain reorder sends once and disables writes until server order is reloaded", async () => {
   const editor = await setup({ fail: () => true });
   editor.button("Move Third up").props.onClick();
   await editor.refresh();
   assert.equal(editor.button("Move Third up").props.disabled, true);
+  assert.equal(editor.calls.length, 1);
   const reload = editor.nodes().find(node => node.type === "button" && node.props.children === "Reload order");
   await reload.props.onClick();
   await editor.refresh();

@@ -109,6 +109,17 @@ test("PUT JSON requests keep their JSON body and content type", async () => {
   assert.equal(calls[0].headers["Content-Type"], "application/json");
 });
 
+test("PATCH course and organization updates preserve changed keys and Bearer authorization", async () => {
+  const { service: connection, calls } = setup([{ status: 204 }, { status: 204 }], "src/utils/connection.ts");
+  await connection.api.patch("/courses/course-1/", { description: "" });
+  await connection.api.patch("/organizations/organization-1/", { org_admin: { email: "new@example.com" } });
+  assert.deepEqual(calls.map(call => [call.url, call.method, JSON.parse(call.body)]), [
+    ["http://localhost:8000/api/courses/course-1/", "PATCH", { description: "" }],
+    ["http://localhost:8000/api/organizations/organization-1/", "PATCH", { org_admin: { email: "new@example.com" } }],
+  ]);
+  assert.ok(calls.every(call => call.headers.Authorization === "Bearer test-access" && call.headers["Content-Type"] === "application/json"));
+});
+
 test("request errors remain errors, while an empty course list remains empty", async () => {
   const { service } = setup([
     { body: [] }, { status: 403, body: { message: "Forbidden" } },

@@ -246,6 +246,13 @@ export const api = {
             : undefined,
     }),
 
+  patch: <T = unknown>(endpoint: string, body?: unknown, config?: RequestConfig) =>
+    request<T>(endpoint, {
+      ...config,
+      method: "PATCH",
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+
   delete: <T = unknown>(endpoint: string, config?: RequestConfig) =>
     request<T>(endpoint, { ...config, method: "DELETE" }),
 };

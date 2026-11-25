@@ -87,7 +87,7 @@ test('organization updates send only changed nested admin fields and preserve ex
   assert.deepEqual(plain(organizationPayload({ ...original, name: ` ${original.name} ` }, false, original)), {});
 });
 
-test('saving an organization edit uses PUT with only changed details at the existing URL', async () => {
+test('saving an organization edit uses PATCH with only changed details at the existing URL', async () => {
   const calls = [];
   let saved = 0;
   const form = organizationToForm(organization);
@@ -95,7 +95,7 @@ test('saving an organization edit uses PUT with only changed details at the exis
   const refs = [];
   let refCursor = 0;
   const api = {
-    put: async (url, body) => { calls.push({ method: 'PUT', url, body: plain(body) }); },
+    patch: async (url, body) => { calls.push({ method: 'PATCH', url, body: plain(body) }); },
   };
   const componentSource = readFileSync(new URL('../component/CreateOrganization.tsx', import.meta.url), 'utf8');
   const componentCompiled = ts.transpileModule(componentSource, {
@@ -126,7 +126,7 @@ test('saving an organization edit uses PUT with only changed details at the exis
   }
   await findForm(tree).props.onSubmit({ preventDefault() {} });
   assert.equal(saved, 1);
-  assert.deepEqual(calls, [{ method: 'PUT', url: '/organizations/organization-1/', body: {
+  assert.deepEqual(calls, [{ method: 'PATCH', url: '/organizations/organization-1/', body: {
     description: 'Updated description',
   } }]);
   await findForm(render({ ...form, description: 'Updated description' })).props.onSubmit({ preventDefault() {} });
